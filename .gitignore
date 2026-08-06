@@ -1,0 +1,16 @@
+# Downloaded sources. fetch_ceec.py / fetch_star.py re-download; the UAC and
+# 統測 PDFs come from the URLs in README.md.
+ceec/
+moe/
+star/
+tech/
+*.pdf
+*.txt
+
+# Built by parse_*.py and rank_uac.py.
+*.tsv
+
+__pycache__/
+*.pyc
+.DS_Store
+*.swp
