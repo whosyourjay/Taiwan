@@ -1,5 +1,6 @@
-# Downloaded sources. fetch_ceec.py / fetch_star.py re-download; the UAC and
-# 統測 PDFs come from the URLs in README.md.
+# Downloaded sources. The fetch_*.py scripts re-download; the UAC and 統測 PDFs
+# come from the URLs in README.md.
+apply/
 ceec/
 moe/
 star/
