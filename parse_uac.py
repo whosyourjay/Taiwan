@@ -19,6 +19,18 @@ def max_per_subject(year):
     return 100.0 if int(year) <= 110 else 60.0
 
 
+# 術科考試 is run by its own committee on its own 100-point scale, which the
+# 指考 -> 分科測驗 switch left alone. Least squares over the departments that
+# admit both with and without it puts that maximum at 100.
+ART_MAX = 100.0
+
+
+def max_score(year, subjects):
+    """Highest weighted total attainable under one department's formula."""
+    academic = max_per_subject(year)
+    return sum((ART_MAX if "術" in s else academic) * float(w) for s, w in subjects)
+
+
 WEIGHT = re.compile(r"([一-鿿][A-Za-z一-鿿]*)x(\d+\.\d+)")
 # The 採計及加權 block is the only reliable anchor: 系組名 may run long enough to
 # swallow its column separator, or wrap onto a line of its own.
@@ -86,7 +98,7 @@ def parse(pdf, year):
                 "total_weight": round(total_weight, 2),
                 "seats": int(seats),
                 "cutoff": cutoff,
-                "norm": round(cutoff / (max_per_subject(year) * total_weight), 4),
+                "norm": round(cutoff / max_score(year, subjects), 4),
             }
         )
     return rows

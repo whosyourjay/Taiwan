@@ -19,6 +19,7 @@ Entities that have closed or merged are kept and marked `active=0`.
 """
 
 import collections
+import itertools
 import os
 
 import gender
@@ -30,7 +31,7 @@ SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
 
 
 def load(system):
-    """Rows for one admission system, dropping 術科 系組 whose scale differs.
+    """Rows for one admission system.
 
     Department names are normalised, so the several 組 a department admits
     through arrive under one name.
@@ -39,8 +40,6 @@ def load(system):
         cols = f.readline().rstrip("\n").split("\t")
         for line in f:
             row = dict(zip(cols, line.rstrip("\n").split("\t")))
-            if "術" in row.get("subjects", ""):
-                continue
             row["system"] = system
             row["dept"] = deptname.normalize(row["dept"])
             row["seats"] = int(row["seats"])
@@ -63,24 +62,26 @@ def wmean(rows, field):
     return sum(r[field] * r["seats"] for r in rows) / seats if seats else 0.0
 
 
-def level_years(rows):
-    """Set `adj`: `norm` with the year's own difficulty removed.
+def curve(rows):
+    """Set `pct`: where a cutoff falls among that year's admitted seats, 0-100.
 
-    An exam that ran easy lifts every cutoff that year, so pooling years raw
-    rewards whoever happens to be present in the generous ones. The shift is
-    measured on departments admitting in every year, so a changing mix of
-    departments cannot masquerade as a change in difficulty.
+    Each year and system is curved against itself, so a year whose exam ran easy
+    lands on the same scale as any other and the raw score's own nonlinearity
+    drops out. Rows sharing a cutoff share the midpoint of the seats they span.
     """
-    seen = collections.defaultdict(set)
+    groups = collections.defaultdict(list)
     for row in rows:
-        seen[(row["school"], row["dept"])].add(row["year"])
-    years = {r["year"] for r in rows}
-    panel = [r for r in rows if len(seen[(r["school"], r["dept"])]) == len(years)]
-    grand = wmean(panel, "norm")
-    effect = {y: wmean([r for r in panel if r["year"] == y], "norm") - grand for y in years}
-    for row in rows:
-        row["adj"] = row["norm"] - effect[row["year"]]
-    return effect
+        groups[(row["year"], row["system"])].append(row)
+    for group in groups.values():
+        total = sum(r["seats"] for r in group)
+        group.sort(key=lambda r: r["norm"])
+        below = 0
+        for _, tied in itertools.groupby(group, key=lambda r: r["norm"]):
+            tied = list(tied)
+            seats = sum(r["seats"] for r in tied)
+            for row in tied:
+                row["pct"] = 100.0 * (below + seats / 2) / total
+            below += seats
 
 
 def by_dept(rows):
@@ -89,7 +90,7 @@ def by_dept(rows):
     for row in rows:
         groups[(row["year"], row["school"], row["dept"])].append(row)
     return {
-        key: (wmean(group, "adj"), sum(r["seats"] for r in group))
+        key: (wmean(group, "pct"), sum(r["seats"] for r in group))
         for key, group in groups.items()
         if sum(r["seats"] for r in group)
     }
@@ -138,19 +139,16 @@ def aggregate(rows, key):
         if not seats:
             continue
         last_year = max(r["year"] for r in group)
-        final = [r for r in group if r["year"] == last_year]
-        final_seats = sum(r["seats"] for r in final)
+        years = len({r["year"] for r in group})
         systems = {r["system"] for r in group}
         out.append(
             {
                 "key": name,
                 "score": wmean(group, "score"),
-                "score_final": wmean(final, "score"),
-                "raw": wmean(group, "norm"),
-                "years": len({r["year"] for r in group}),
+                "years": years,
                 "last_year": last_year,
                 "active": int(last_year == LATEST),
-                "seats_final": final_seats,
+                "seats_avg": seats / years,
                 "system": "both" if len(systems) > 1 else systems.pop(),
             }
         )
@@ -165,9 +163,8 @@ def write(path, header, ranked, key_fields, counts):
         for i, d in enumerate(ranked, 1):
             fields = [str(i)]
             fields += list(d["key"]) if key_fields > 1 else [d["key"]]
-            fields += [f"{d['score']:.4f}", f"{d['score_final']:.4f}", f"{d['raw']:.4f}"]
-            fields += [str(d["years"]), str(d["last_year"])]
-            fields += [str(d["active"]), str(d["seats_final"]), d["system"]]
+            fields += [f"{d['score']:.2f}", str(d["years"]), str(d["last_year"])]
+            fields += [str(d["active"]), f"{d['seats_avg']:.1f}", d["system"]]
             found = counts(d["key"])
             if found and sum(found):
                 men, women = found
@@ -182,22 +179,21 @@ def write(path, header, ranked, key_fields, counts):
 def main():
     uac_rows, tech_rows = list(load("uac")), list(load("tech"))
     unify_spelling(uac_rows + tech_rows)
-    for system_rows in (uac_rows, tech_rows):
-        level_years(system_rows)
+    curve(uac_rows + tech_rows)
     intercept, slope, stats = fit_bridge(by_dept(uac_rows), by_dept(tech_rows))
     print(
-        f"bridge: uac = {intercept:.4f} + {slope:.4f} * tech"
+        f"bridge: uac = {intercept:.3f} + {slope:.4f} * tech"
         f"   R2={stats['r2']:.3f}  n={stats['n']} dept-years"
         f"  ({stats['depts']} depts, {stats['schools']} schools,"
-        f" 統測 {stats['lo']:.2f}-{stats['hi']:.2f})"
+        f" 統測 {stats['lo']:.1f}-{stats['hi']:.1f})"
     )
     for row in uac_rows:
-        row["score"] = row["adj"]
+        row["score"] = row["pct"]
     for row in tech_rows:
-        row["score"] = intercept + slope * row["adj"]
+        row["score"] = intercept + slope * row["pct"]
     rows = uac_rows + tech_rows
-    tail = ["score", "score_final", "score_raw", "years", "last_year", "active"]
-    tail += ["seats_final", "system", "men", "women", "pct_women"]
+    tail = ["score", "years", "last_year", "active", "seats_avg", "system"]
+    tail += ["men", "women", "pct_women"]
     by_dept_counts = gender.load()
     by_school_counts = gender.school_totals(by_dept_counts)
     write(
