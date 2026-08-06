@@ -10,14 +10,13 @@ Covers both admission systems, on one scale: 141 institutions, 2,992 departments
 - `rank-universities.tsv` — 141 institutions (122 still admitting in 114)
 - `rank-departments.tsv` — 2,992 (institution, department) pairs
 
-Columns: `rank school [dept] score score_final score_raw years last_year active
-seats_final system men women pct_women`
+Columns: `rank school [dept] score years last_year active seats_avg system
+men women pct_women`
 
-- `score` — difficulty on the 分發入學 axis, comparable across both systems.
-  Averages 108-114, weighted by admitted seats.
-- `score_final` — the last year the entity admitted anyone, so `score` and
-  `score_final` together show drift.
-- `score_raw` — the raw fraction of maximum, before year-leveling or bridging.
+- `score` — 0-100, the percentile of the 分發入學 seats that were harder to win.
+  Averages 108-114, weighted by admitted seats. 科大 are mapped onto this axis
+  and the weakest of them land slightly below 0; see Bridging.
+- `seats_avg` — admitted seats per year, averaged over the years it ran.
 - `active` — 1 if it still admitted students in 114.
 - `system` — `uac` (一般大學), `tech` (科技大學), or `both` where the entity
   admits through each.
@@ -34,8 +33,7 @@ seats_final system men women pct_women`
 
     https://www.jctv.ntut.edu.tw/downloads/{year}/union42/{year}_up01.pdf
 
-Both are text PDFs, so `pdftotext -layout` reads them. The UAC archive is on
-`www2`; the `www` host 404s.
+Both are text PDFs
 
 一般大學, 繁星推薦 (學測 + 在校學業成績全校排名百分比). 各校系錄取標準一覽表,
 split into 第一類至第七類學群 and 第八類學群 (medicine):
@@ -72,23 +70,40 @@ cutoff to a fraction of the maximum score attainable under its own formula:
 which scales 學測 級分 by 4 onto the same range. 統測 scores 國文, 英文, 數學,
 專業(一) and 專業(二) out of 100 each, so 100 throughout.
 
+術科 is the exception, and gets 100 in every year: it is a separate exam under a
+separate committee, which the 指考 to 分科測驗 switch left alone. 45 department-
+years admit one intake with 術科 in the formula and another without, at the same
+department in the same year, and least squares over those pairs puts the 術科
+maximum at 100.0 — matching both the 100.6 implied by the 指考 years alone and
+the 100 points each 術科考試 item carries. Scoring it at 60 instead pushed nine
+music departments past a perfect score.
+
 An institution's score is the seat-weighted mean over every one of its rows, in
 one pass rather than a mean of department means, so it answers how hard the
 typical admitted seat was.
 
-### Levelling the years
+### Curving to percentiles
 
-An exam that runs easy lifts every cutoff that year. On the same 1,139
-departments, the mean 分發入學 cutoff moves 0.664 (108) to 0.551 (111) to 0.618
-(114) — a swing wider than the gap between the 1st and 30th university, and
-enough to reward whoever happens to admit in the generous years. Each year's
-mean is subtracted before pooling, measured over departments admitting in every
-year so that a changing mix of departments cannot pose as a change in
-difficulty. 統測 is levelled separately, against its own years.
+`norm` is a fraction of a maximum, which assumes the raw scale is linear in
+ability. It is not: 級分 distributions are lumpy and asymmetric, and every
+department's weight vector composes them differently, so equal `norm` gaps at
+different points on the scale are not equal differences in difficulty.
 
-Ranks built from complete 108-114 coverage barely move (mean 1.4 places). The
-correction matters for the 25 institutions with partial coverage — ones founded
-or closed mid-window — which move 6.8 places on average and up to 15.
+So each (year, system) is curved against its own admitted seats. A row's score
+is the percentage of that year's seats that went to a harder cutoff, counting
+seats rather than departments, with ties sharing the midpoint of the span they
+cover. Only the *ordering* of cutoffs within a year survives, which is the part
+the raw scale gets right.
+
+This also subsumes year-levelling: an exam that ran easy lifts every cutoff
+that year, and a percentile is invariant to that by construction. Where the
+previous fraction-of-maximum scale drifted 0.664 (108) to 0.551 (111) — wider
+than the gap between the 1st and 30th university — the curved scale leaves a
+residual of ±3 points on a fixed panel of departments, and that residual is
+composition rather than difficulty: new departments entering the field move the
+established ones. Subtracting it as well changes rank by 0.96 places on average
+and leaves 75 of 141 institutions untouched, so it is not worth asserting that
+the average established department cannot move.
 
 ### Merging admission groups
 
@@ -120,10 +135,14 @@ Each department contributes one point per year it ran, weighted by the smaller o
 its two intakes, since that is what limits how precisely it locates the line.
 Least squares over those 315 department-years gives
 
-    uac = 0.1896 + 0.5570 * tech      R2 = 0.419
+    uac = -15.11 + 0.7433 * tech      R2 = 0.412
 
-which maps every 科大 onto the 分發入學 axis. The matched departments span 統測
-0.22-0.88, so the map is almost never extrapolating.
+which maps every 科大 onto the 分發入學 axis. Each system is curved against its
+own field, so both run 0-100 before bridging; the fit is what says that the two
+fields sit at different heights. It puts the 統測 seat pool below the 分科 one
+throughout — the strongest 科大 department lands near the 58th percentile of
+分發入學 seats, and the weakest few fall slightly below 0, which is an honest
+extrapolation rather than a floor to clip.
 
 The fit is applied to 76 科大 that have no 分發入學 data at all, so estimators
 were compared by leave-one-school-out error: fit on five of the six bridge
@@ -133,7 +152,8 @@ multi-year mean does not (0.0543), and neither does a department-level random
 intercept, which is best at 0.0528 but only by tuning a penalty large enough that
 it nearly reproduces the fit above. Letting each department keep a free intercept
 is worst of all (0.0562), which says the year-to-year variation left inside a
-department after levelling is mostly noise.
+department is mostly noise. Those figures were measured on the
+fraction-of-maximum scale, before curving.
 
 ### Gender
 
@@ -175,15 +195,33 @@ Two things stop `gpa` from being a drop-in third axis:
 so its counts run to twice the quota and its percentiles are looser. Keep those
 rows out of any aggregate with `group=one2seven`.
 
-## Exclusions
+### 個人申請
 
-- **術科 departments** (431 rows). The arts practical exam is not on the 60/100
-  subject scale, and normalising it alongside academic subjects puts four music
-  departments above 1.0. No institution loses all its departments, but
-  臺灣藝術大學 drops from 14 departments to 6. 統測 has no 術科 component.
-- Nothing else. Institutions that have closed or merged are kept and marked
-  `active=0`, so 國立陽明大學 and 國立交通大學 appear alongside the
-  國立陽明交通大學 they merged into in 110.
+A fourth route, OCR'd from CAC's PNGs into `apply-cutoffs.tsv`, same 8 schools
+and years. What it reports is a first-stage 篩選標準, not a final cutoff:
+applicants are cut to a multiple of the intake (`ratio`, the 篩選倍率) before
+interviewing. 篩選順序一, 順序二… apply in turn, so the last one that fired is the
+tightest bar, and `norm` divides it by the maximum attainable under the subjects
+it names (15 級分 each).
+
+`seats` is 招生名額, places offered. `admitted` scales it by the year's national
+fill rate — 獲分發人數 over 招生名額總數, 88.7% for 110 and 81.6% for 111, from
+CAC's `{year}_member_statistics.php`. No screened-to-admitted guess is needed,
+because the table states the intake directly.
+
+**Unfinished, and not wired into `score`.** Two known defects:
+
+- **28 rows of 546 (5%) have `norm` above 1**, which is impossible. OCR drops a
+  character from composite labels — `(國文+英文)28` reads as `國文英` — so the
+  subject count comes out too low and the ratio too high. Every affected row is
+  caught by `norm > 1`. Untreated they inflate 交通 to 1.53 and 臺大 to 1.34, so
+  the school-level aggregate is not usable until they are fixed or dropped.
+- **111 of 546 校系名稱 are blank** and others are misread. Join on `dept_code`,
+  not `dept`. `dept_ocr` holds the raw OCR; `dept` is that snapped to a real
+  department name where one matched.
+
+校系代碼, 招生名額, 篩選倍率 and the 檢定標準 bands all check out against the
+images. The damage is confined to parsing the composite subject labels.
 
 ## Caveats
 
@@ -199,14 +237,20 @@ rows out of any aggregate with `group=one2seven`.
   via 個人申請 and 繁星推薦, which are 學測-based. 繁星 is now in `star/` for 8
   schools; 個人申請 is published only as PNG images, so it would need OCR, and
   what it reports is a first-stage 篩選標準 rather than a final cutoff.
-- **`score` is a fraction of maximum, not a percentile.** The gap between 0.87
-  and 0.80 is not a linear difficulty gap. `ceec/` is what would fix this.
+- **`score` is a percentile of admitted seats, not of applicants.** It says how
+  many admitted students beat a harder cutoff, so it is a percentile within the
+  people who got a place through this channel, not within everyone who sat the
+  exam. `ceec/` is what would convert a cutoff to a percentile of test-takers.
+- **The percentile is within one exam's field.** Curving fixes the raw scale's
+  nonlinearity but not the fact that a department's weight vector selects a
+  particular set of subjects, whose takers are a particular slice.
 - **Not all 141 are universities.** 3 are 專科學校 (junior colleges) and 7 are
   學院. The name suffix identifies them if you want to filter.
 - **Small departments are noisy.** The department file's top rows include
-  2-seat, single-year entries. Filter on `seats_final`.
-- Arts schools stay over-ranked even after the 術科 exclusion: 臺灣藝術大學
-  sits in the top 15 on 91 seats.
+  2-seat, single-year entries. Filter on `seats_avg`.
+- **Thin channels.** A school where 分發入學 is a small side door is measured on
+  whoever came through it. The median institution admits 26% of its intake this
+  way; 國立臺灣體育運動大學 admits 11%, and its score rests on that slice.
 
 ## Rebuild
 
@@ -215,8 +259,15 @@ rows out of any aggregate with `group=one2seven`.
     python3 rank_uac.py      # both, bridge, gender     -> rank-*.tsv
     python3 fetch_star.py 110 111   # -> star/,  ~2s and 340KB a year
     python3 parse_star.py           # star/*.pdf -> star-cutoffs.tsv, ~6 pages/s
+    python3 fetch_apply.py 110 111   # -> apply/, ~7s and 4.4MB
+    python3 parse_apply.py           # OCR apply/*.png -> apply-cutoffs.tsv, ~4min
     python3 fetch_ceec.py    # optional, only refreshes ceec/
     python3 -m unittest test_deptname test_star
 
 `rank_uac.py` pulls the 教育部 CSV through `gender.py` on first run. The 系組
 name normalisation both it and `gender.py` group by lives in `deptname.py`.
+
+`parse_apply.py` needs tesseract with traditional Chinese:
+
+    curl -L https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_tra.traineddata \
+      -o /usr/local/share/tessdata/chi_tra.traineddata
