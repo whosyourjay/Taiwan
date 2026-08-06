@@ -1,10 +1,9 @@
 """Parse UAC 分發入學 minimum-admission-score PDFs into a TSV.
 
 One row per 系組 (department/group) per year, with the weighted cutoff score
-normalised to a 0-1 fraction of the maximum attainable weighted score.
-
-Since 111 學年度 every subject is reported on a 60-point scale (學測 級分 are
-multiplied by 4), so a department's maximum is 60 * sum(weights).
+normalised to a 0-1 fraction of the maximum attainable weighted score. The UAC
+guide assigns 60 levels to 學測 and 分科採計 scores from 111, and keeps 術科 on
+its 100-point scale.
 """
 
 import glob
@@ -13,15 +12,12 @@ import re
 import subprocess
 import sys
 
-# 指考 (through 110) scored each subject out of 100; 分科測驗 (111 on) uses 60 級分,
-# with 學測 級分 scaled by 4 onto the same 60-point range.
+# 指考 (through 110) uses 100 points; UAC academic scores from 111 use 60 levels.
 def max_per_subject(year):
     return 100.0 if int(year) <= 110 else 60.0
 
 
-# 術科考試 is run by its own committee on its own 100-point scale, which the
-# 指考 -> 分科測驗 switch left alone. Least squares over the departments that
-# admit both with and without it puts that maximum at 100.
+# UAC's admissions guide specifies a 100-point scale for 術科採計.
 ART_MAX = 100.0
 
 
