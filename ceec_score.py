@@ -37,6 +37,11 @@ def weighted_midpoints(rows, field):
     counts = collections.Counter()
     for row in rows:
         counts[row[field]] += row["seats"]
+    return midranks(counts)
+
+
+def midranks(counts):
+    """Return sorted values and midranks from a value -> weight mapping."""
     total = sum(counts.values())
     below = 0.0
     values, percentiles = [], []
@@ -101,14 +106,7 @@ class ScoreDistributions:
 
         self.quantiles = {}
         for key, counts in grouped.items():
-            total = sum(counts.values())
-            below = 0.0
-            percentiles, scores = [], []
-            for score, count in sorted(counts.items()):
-                # Candidates tied in a score bin share its midrank.
-                percentiles.append((below + count / 2) / total)
-                scores.append(score)
-                below += count
+            scores, percentiles = midranks(counts)
             self.quantiles[key] = (percentiles, scores)
 
     @classmethod

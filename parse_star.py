@@ -20,6 +20,8 @@ import sys
 
 import pdfplumber
 
+import tsvio
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # 檢定 subject column, then the 比序 item and its four value columns.
@@ -209,12 +211,8 @@ def main(out_path):
         got = parse(pdf)
         print(f"{os.path.basename(pdf)}: {len(got)} 校系", file=sys.stderr)
         rows.extend(got)
-    cols = list(rows[0])
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\t".join(cols) + "\n")
-        for r in rows:
-            f.write("\t".join(str(r[c]) for c in cols) + "\n")
-    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    written = tsvio.write_rows(out_path, rows)
+    print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,14 @@ def rows(spec, system="uac", year="114"):
     ]
 
 
+class TestApplicationGroup(unittest.TestCase):
+    def test_raw_group_survives_department_normalisation(self):
+        row = {"dept": "法律學系司法組"}
+        rank_uac.identify_department(row)
+        self.assertEqual(row["dept"], "法律學系")
+        self.assertEqual(row["application_group"], "法律學系司法組")
+
+
 class TestCurve(unittest.TestCase):
     def test_spans_the_seats(self):
         data = rows([(0.9, 10), (0.5, 10), (0.7, 10)])

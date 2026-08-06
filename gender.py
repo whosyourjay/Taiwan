@@ -37,14 +37,13 @@ def fetch(year=LATEST):
 def load(year=LATEST):
     """Map (校名, normalised 系名) -> (men, women) for day-division bachelors."""
     with open(fetch(year), encoding="utf-8-sig") as f:
-        rows = list(csv.DictReader(f))
-    out = collections.defaultdict(lambda: [0, 0])
-    for row in rows:
-        if not row["等級別"].startswith("B") or not row["日間∕進修別"].startswith("D"):
-            continue
-        dept = (row["學校名稱"], key(row["科系名稱"]))
-        out[dept][0] += int(row["男生計"])
-        out[dept][1] += int(row["女生計"])
+        out = collections.defaultdict(lambda: [0, 0])
+        for row in csv.DictReader(f):
+            if not row["等級別"].startswith("B") or not row["日間∕進修別"].startswith("D"):
+                continue
+            dept = (row["學校名稱"], key(row["科系名稱"]))
+            out[dept][0] += int(row["男生計"])
+            out[dept][1] += int(row["女生計"])
     return out
 
 

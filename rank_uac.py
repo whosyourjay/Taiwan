@@ -1,4 +1,4 @@
-"""Rank Taiwanese universities and departments by undergraduate admission difficulty.
+"""Rank Taiwanese universities, departments and application groups by difficulty.
 
 Covers both admission systems:
   - 一般大學 via 分發入學, 繁星推薦 and 個人申請
@@ -24,12 +24,12 @@ Entities that have closed or merged are kept and marked `active=0`.
 """
 
 import collections
-import itertools
 import os
 
 import ceec_score
 import deptname
 import gender
+import tsvio
 
 HERE = os.path.dirname(__file__)
 LATEST = "114"
@@ -39,11 +39,10 @@ SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
 EXTRA = {"star": "star-cutoffs.tsv", "apply": "apply-cutoffs.tsv"}
 
 
-def rows_of(name):
-    with open(os.path.join(HERE, name), encoding="utf-8") as f:
-        cols = f.readline().rstrip("\n").split("\t")
-        for line in f:
-            yield dict(zip(cols, line.rstrip("\n").split("\t")))
+def identify_department(row):
+    """Preserve the source 系組 name, then attach its reporting department."""
+    row["application_group"] = row["dept"].strip()
+    row["dept"] = deptname.normalize(row["application_group"])
 
 
 def load(system, distributions=None):
@@ -52,10 +51,10 @@ def load(system, distributions=None):
     Department names are normalised, so the several 組 a department admits
     through arrive under one name.
     """
-    for row in rows_of(SOURCES[system]):
+    for row in tsvio.read_rows(os.path.join(HERE, SOURCES[system])):
         row["system"] = system
         row["path"] = system
-        row["dept"] = deptname.normalize(row["dept"])
+        identify_department(row)
         row["seats"] = int(row["seats"])
         row["norm"] = float(row["norm"])
         row["basis"] = row["norm"]
@@ -76,13 +75,13 @@ def load_star():
     beats 17%, so it is negated to match every other path. 第八類學群 reports
     通過篩選 ahead of a 甄試 rather than admission, and is left out.
     """
-    for row in rows_of(EXTRA["star"]):
+    for row in tsvio.read_rows(os.path.join(HERE, EXTRA["star"])):
         admitted = int(row["admitted"] or 0)
         if row["group"] == "eight" or not row["gpa"] or not admitted:
             continue
         row["system"], row["path"] = "uac", "star"
         row["school"] = row["college"]
-        row["dept"] = deptname.normalize(row["dept"])
+        identify_department(row)
         row["seats"] = admitted
         row["norm"] = -float(row["gpa"])
         row["basis"] = row["norm"]
@@ -95,7 +94,7 @@ def load_apply():
     A `norm` above 1 is impossible and means a subject was lost from a composite
     label, and a blank 校系名稱 cannot be joined to a department.
     """
-    for row in rows_of(EXTRA["apply"]):
+    for row in tsvio.read_rows(os.path.join(HERE, EXTRA["apply"])):
         if not row["norm"] or not row["dept"].strip():
             continue
         norm = float(row["norm"])
@@ -104,7 +103,7 @@ def load_apply():
             continue
         row["system"], row["path"] = "uac", "apply"
         row["school"] = row["college"]
-        row["dept"] = deptname.normalize(row["dept"])
+        identify_department(row)
         row["seats"] = admitted
         row["norm"] = norm
         row["basis"] = row["norm"]
@@ -147,15 +146,10 @@ def curve(rows, source, target, key):
     for row in rows:
         groups[key(row)].append(row)
     for group in groups.values():
-        total = sum(r["seats"] for r in group)
-        group.sort(key=lambda r: r[source])
-        below = 0
-        for _, tied in itertools.groupby(group, key=lambda r: r[source]):
-            tied = list(tied)
-            seats = sum(r["seats"] for r in tied)
-            for row in tied:
-                row[target] = 100.0 * (below + seats / 2) / total
-            below += seats
+        values, percentiles = ceec_score.weighted_midpoints(group, source)
+        percentile_of = dict(zip(values, percentiles))
+        for row in group:
+            row[target] = 100.0 * percentile_of[row[source]]
 
 
 def by_dept(rows, field="pct"):
@@ -163,11 +157,12 @@ def by_dept(rows, field="pct"):
     groups = collections.defaultdict(list)
     for row in rows:
         groups[(row["year"], row["school"], row["dept"])].append(row)
-    return {
-        key: (wmean(group, field), sum(r["seats"] for r in group))
-        for key, group in groups.items()
-        if sum(r["seats"] for r in group)
-    }
+    out = {}
+    for key, group in groups.items():
+        seats = sum(row["seats"] for row in group)
+        if seats:
+            out[key] = (wmean(group, field), seats)
+    return out
 
 
 def fit_bridge(reference, path):
@@ -188,13 +183,15 @@ def fit_bridge(reference, path):
         w * (x - mean_x) ** 2 for w, x in zip(ws, xs)
     )
     intercept = mean_y - slope * mean_x
-    total = sum(w * (y - mean_y) ** 2 for w, y in zip(ws, ys))
-    resid = sum(w * (y - (intercept + slope * x)) ** 2 for w, x, y in zip(ws, xs, ys))
+    variance = sum(w * (y - mean_y) ** 2 for w, y in zip(ws, ys))
+    residual = sum(
+        w * (y - (intercept + slope * x)) ** 2 for w, x, y in zip(ws, xs, ys)
+    )
     stats = {
         "n": len(keys),
         "depts": len({(k[1], k[2]) for k in keys}),
         "schools": len({k[1] for k in keys}),
-        "r2": 1 - resid / total,
+        "r2": 1 - residual / variance,
         "lo": min(xs),
         "hi": max(xs),
     }
@@ -248,7 +245,7 @@ def aggregate(rows, key):
     return sorted(out, key=lambda d: -d["score"])
 
 
-def write(path, header, ranked, key_fields, counts):
+def write(path, header, ranked, counts):
     """Write a ranking with blank English-name slots and optional gender counts.
 
     `counts` maps a row key to (men, women); absent keys leave those cells blank.
@@ -258,7 +255,7 @@ def write(path, header, ranked, key_fields, counts):
         f.write("\t".join(header) + "\n")
         for i, d in enumerate(ranked, 1):
             fields = [str(i)]
-            names = list(d["key"]) if key_fields > 1 else [d["key"]]
+            names = d["key"] if isinstance(d["key"], tuple) else (d["key"],)
             for name in names:
                 fields += [name, ""]
             fields += [f"{d['score']:.2f}", str(d["years"]), str(d["last_year"])]
@@ -343,15 +340,31 @@ def main():
         os.path.join(HERE, "rank-universities.tsv"),
         ["rank", "school", "school_en"] + tail,
         aggregate(rows, lambda r: r["school"]),
-        1,
         lambda school: by_school_counts.get(school),
     )
     write(
         os.path.join(HERE, "rank-departments.tsv"),
         ["rank", "school", "school_en", "dept", "dept_en"] + tail,
         aggregate(rows, lambda r: (r["school"], r["dept"])),
-        2,
         lambda key: gender.lookup(by_dept_counts, *key),
+    )
+    write(
+        os.path.join(HERE, "rank-application-groups.tsv"),
+        [
+            "rank",
+            "school",
+            "school_en",
+            "dept",
+            "dept_en",
+            "application_group",
+            "application_group_en",
+        ]
+        + tail,
+        aggregate(
+            uac_rows + tech_rows,
+            lambda r: (r["school"], r["dept"], r["application_group"]),
+        ),
+        lambda key: None,
     )
 
 

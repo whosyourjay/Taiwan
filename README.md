@@ -39,12 +39,15 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 
 - `rank-universities.tsv` — 141 institutions (122 still admitting in 114)
 - `rank-departments.tsv` — 3,040 (institution, department) pairs
+- `rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
+  department merging
 
-Columns: `rank school school_en [dept dept_en] score years last_year active
-seats_avg system men women pct_women`
+Columns: `rank school school_en [dept dept_en [application_group
+application_group_en]] score years last_year active seats_avg system men women
+pct_women`
 
-`school_en` and `dept_en` are intentionally blank join slots. English-name
-mappings are maintained outside this repository.
+`school_en`, `dept_en` and `application_group_en` are intentionally blank join
+slots. English-name mappings are maintained outside this repository.
 
 - `score` — 0-100. Each admission path is scored on the common admitted-seat
   axis, then the path scores are averaged by their annual admitted seats.
@@ -54,7 +57,8 @@ mappings are maintained outside this repository.
 - `system` — `uac` (一般大學), `tech` (科技大學), or `both` where the entity
   admits through each.
 - `men`, `women`, `pct_women` — enrolled bachelor headcount, blank where 教育部
-  has no matching department. See Auxiliary gender join below.
+  has no matching department and for every application group. See Auxiliary
+  gender join below.
 
 ## Method
 
@@ -62,10 +66,13 @@ mappings are maintained outside this repository.
 
 ### 1. Group departments
 
-`deptname.py` removes admission-group, track, campus, funding and quota
-qualifiers. It also treats `系` and `學系` as the same name and reports the
-spelling attached to the most admitted seats. This collapses 4,489 source names
-from 分發 and 聯登 into 3,040 institution-department pairs.
+The application-group output keeps each source 系組 name from the two fully
+collected final-cutoff routes. 繁星 and 個申 do not enter it because their group
+boundaries do not consistently match 分發. `deptname.py` then removes group,
+track, campus, funding and quota qualifiers for the department output. It also
+treats `系` and `學系` as the same name and reports the spelling attached to the
+most admitted seats. This collapses 4,489 source names from 分發 and 聯登 into
+3,040 institution-department pairs.
 
 ### 2. Compute a row basis
 

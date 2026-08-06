@@ -12,6 +12,10 @@ import re
 import subprocess
 import sys
 
+import tsvio
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 # 指考 (through 110) uses 100 points; UAC academic scores from 111 use 60 levels.
 def max_per_subject(year):
     return 100.0 if int(year) <= 110 else 60.0
@@ -53,7 +57,7 @@ def split_prefix(prefix, carry):
 
 
 def pdf_text(pdf):
-    txt = pdf.replace(".pdf", ".txt")
+    txt = os.path.splitext(pdf)[0] + ".txt"
     if not os.path.exists(txt):
         subprocess.run(["pdftotext", "-layout", pdf, txt], check=True)
     with open(txt, encoding="utf-8", errors="replace") as f:
@@ -102,18 +106,14 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(os.path.join(os.path.dirname(__file__), "uac-*-cutoffs.pdf"))):
+    for pdf in sorted(glob.glob(os.path.join(HERE, "uac-*-cutoffs.pdf"))):
         year = re.search(r"uac-(\d+)-", pdf).group(1)
         got = parse(pdf, year)
         print(f"{year}: {len(got)} 系組", file=sys.stderr)
         rows.extend(got)
-    cols = list(rows[0])
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\t".join(cols) + "\n")
-        for r in rows:
-            f.write("\t".join(str(r[c]) for c in cols) + "\n")
-    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    written = tsvio.write_rows(out_path, rows)
+    print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main(os.path.join(os.path.dirname(__file__), "uac-cutoffs.tsv"))
+    main(os.path.join(HERE, "uac-cutoffs.tsv"))

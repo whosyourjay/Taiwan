@@ -12,7 +12,10 @@ import os
 import re
 import sys
 
+import tsvio
 from parse_uac import pdf_text
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 MAX_PER_SUBJECT = 100.0
 ROW = re.compile(
@@ -70,18 +73,15 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(os.path.join(os.path.dirname(__file__), "tech", "union42-*.pdf"))):
+    pattern = os.path.join(HERE, "tech", "union42-*.pdf")
+    for pdf in sorted(glob.glob(pattern)):
         year = re.search(r"union42-(\d+)-", pdf).group(1)
         got = parse(pdf, year)
         print(f"{year}: {len(got)} 系科組", file=sys.stderr)
         rows.extend(got)
-    cols = list(rows[0])
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\t".join(cols) + "\n")
-        for r in rows:
-            f.write("\t".join(str(r[c]) for c in cols) + "\n")
-    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    written = tsvio.write_rows(out_path, rows)
+    print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main(os.path.join(os.path.dirname(__file__), "tech-cutoffs.tsv"))
+    main(os.path.join(HERE, "tech-cutoffs.tsv"))

@@ -28,6 +28,8 @@ import sys
 import numpy as np
 from PIL import Image
 
+import tsvio
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 N_ORDERS = 6
@@ -234,12 +236,13 @@ def measure(orders):
 def parse(path, colleges, names):
     year, code = os.path.basename(path)[:-4].split("-")
     im = Image.open(path).convert("L")
-    counts = [len(vs) - 1 for _, _, vs in grid(np.array(im) < 128)]
+    grid_rows = grid(np.array(im) < 128)
+    counts = [len(vs) - 1 for _, _, vs in grid_rows]
     n_cells = max(LAYOUTS, key=counts.count)
     gate_names, ratio_names = LAYOUTS[n_cells]
     r0 = GATE_0 + len(gate_names)
     o0 = r0 + len(ratio_names)
-    rows = [r for r in grid(np.array(im) < 128) if len(r[2]) - 1 == n_cells]
+    rows = [row for row in grid_rows if len(row[2]) - 1 == n_cells]
     cols = {j: read_column(im, rows, j, wl)
             for j, wl in alphabet(gate_names, ratio_names).items()}
     college = colleges.get((year, code), "")
@@ -318,12 +321,8 @@ def main(out_path):
         print(f"{os.path.basename(png)}: {len(got)} 校系, {skipped} non-data rows",
               file=sys.stderr)
         rows.extend(got)
-    cols = list(rows[0])
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\t".join(cols) + "\n")
-        for r in rows:
-            f.write("\t".join(str(r[c]) for c in cols) + "\n")
-    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    written = tsvio.write_rows(out_path, rows)
+    print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
