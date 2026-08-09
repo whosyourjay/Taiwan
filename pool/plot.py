@@ -34,21 +34,29 @@ def steps(values, bins):
     return np.array(x), np.array(y)
 
 
+def density_curve(fitted, exam):
+    """Density curve for either constant bins or a continuous linear fit."""
+    if hasattr(fitted, "percentile_density_points"):
+        values = fitted.percentile_density_points(exam)
+        return np.linspace(0.0, 100.0, len(values)), values
+    return steps(fitted.percentile_density(exam), fitted.bins)
+
+
 def draw(fitted, sizes, observations, error, naive, year, path=OUT):
     plt.rcParams["font.sans-serif"] = FONTS + plt.rcParams["font.sans-serif"]
     plt.rcParams["axes.unicode_minus"] = False
     figure, (left, right) = plt.subplots(1, 2, figsize=(12.5, 5.2))
-    exams = sorted(fitted.shares)
+    exams = fitted.exams
 
     for exam in exams:
         colour, label = STYLE.get(exam, ("#57606a", exam))
-        x, y = steps(fitted.percentile_density(exam), fitted.bins)
+        x, y = density_curve(fitted, exam)
         left.plot(x, y, color=colour, linewidth=2.4,
                   label=f"{label}  ({sizes.get(exam, 0):,.0f} takers)")
         left.fill_between(x, 0.0, y, color=colour, alpha=0.13)
     left.set_xlim(0, 100)
-    left.set_ylim(0, max(fitted.percentile_density(e).max()
-                         for e in exams) * 1.18)
+    left.set_ylim(0, max(density_curve(fitted, exam)[1].max()
+                         for exam in exams) * 1.18)
     left.set_xlabel("cohort ability percentile  (100 = top)")
     left.set_ylabel("test takers per cohort-percentile point")
     left.set_title(f"Independent fitted test-pool densities, {year}")
@@ -87,7 +95,7 @@ def main():
     _, observations = pool_fit.observations()
     exams = sorted({e for o in observations for e in (o[0], o[2])})
     sizes = pool_fit.taker_counts()
-    fitted, error = model.fit(observations, exams, sizes, bins=pool_fit.BINS)
+    fitted, error = model.fit_two_line(observations, exams, sizes)
     written = draw(fitted, sizes, observations, error,
                    pool_fit.naive_error(observations), pool_fit.YEAR)
     print(f"wrote {written}")

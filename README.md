@@ -140,13 +140,13 @@ headcounts on normalized department names and matches 2,407 of 3,040 rows.
 
 ## Experimental test-pool fit
 
-`python3 -m pool.fit` puts 學測, 統測, and 指考 on one original-cohort
-percentile axis for 110. Each exam has an independent three-step count density
-`q_e(x)`. Students may take any subset of the exams, so the three densities do
-not partition the cohort and need not sum to anything.
+`python3 pool/fit.py` puts 學測, 統測, and 指考 on one original-cohort
+percentile axis for 110. Each exam has an independent two-segment continuous
+linear count density `q_e(x)`. Students may take any subset of the exams, so
+the three densities do not partition the cohort and need not sum to anything.
 
-For exam `e`, its three bin counts are constrained to sum to the observed number
-of test takers `N_e`:
+For exam `e`, its density integrates to the observed number of test takers
+`N_e`:
 
     integral_0^1 q_e(x) dx = N_e
 
@@ -164,9 +164,15 @@ screen and add 380 same-department 學測–統測 matches; with the prior 38, t
 bridge now has 418 pairs. They are bridge evidence only, not final admission
 cutoffs and not an added ranking path.
 
-Three steps reduce mean disagreement from 18.63 to 9.96 cohort-percentile
-points. Counts only scale each independent density; they do not distort its
-percentile conversion or assert which students took both.
+The two-line model has five shape parameters: two each for 學測 and 統測, and
+one for 指考. A three-step model needs six. 指考's density reaches zero at the
+top of the cohort, reflecting that a student who has already aced 學測 has no
+reason to take its second exam. Each exam's density is also capped at the
+academic-plus-vocational cohort size; otherwise an unconstrained fit can place
+more test takers at one ability level than there are students. On all current
+thresholds, direct percentile transfer has 18.63 mean absolute disagreement and
+the constrained linear fit has 7.76 points. This is an in-sample diagnostic;
+additional years will be the meaningful held-out check.
 
 `python3 pool/fit.py` reports the fit and writes `pool-densities.png`. The left
 panel shows all three count densities, including the new 統測 curve, and the

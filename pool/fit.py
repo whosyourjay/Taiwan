@@ -6,7 +6,6 @@ gap between the abilities they imply is the error to minimise.
 """
 
 import collections
-import contextlib
 import os
 import sys
 
@@ -23,7 +22,6 @@ from pool import model
 # 110 is the year every school was collected for, and the last year 分發入學 ran
 # purely on 指考 — from 111 its formulas mix in 學測 subjects.
 YEAR = "110"
-BINS = 3
 
 
 EXAMS = {
@@ -105,37 +103,56 @@ def report(pool_fit, observations, error):
     print(f"  taking percentiles as comparable: {naive_error(observations):5.2f} points")
     print(f"  after placing all on the cohort:   {error:5.2f} points")
 
-    print("\nfitted takers in each cohort-ability bin")
+    print("\nfitted takers in each cohort-ability segment")
     header = "  " + f"{'exam':<9}{'observed':>11}" + "".join(
-        f"{f'{100*k//BINS}-{100*(k+1)//BINS}%':>12}" for k in range(BINS)
+        f"{f'{100*k//pool_fit.bins}-{100*(k+1)//pool_fit.bins}%':>12}"
+        for k in range(pool_fit.bins)
     )
     print(header)
     print("  " + "-" * (len(header) - 2))
-    for exam in sorted(pool_fit.shares):
+    for exam in pool_fit.exams:
         counts = pool_fit.bin_counts(exam)
         print("  " + f"{exam:<9}{pool_fit.sizes[exam]:>11,.0f}"
               + "".join(f"{n:>12,.0f}" for n in counts))
 
     print("\nwhere a bar lands on the cohort, by exam")
-    names = sorted(pool_fit.shares)
+    names = pool_fit.exams
     print("  " + f"{'top of takers':<20}" + "".join(f"{e:>12}" for e in names))
     for top in (0.01, 0.05, 0.10, 0.25, 0.50):
         cells = "".join(f"{100 * pool_fit.ability(e, top):>11.1f}%" for e in names)
         print("  " + f"top {100 * top:>4.0f}% of takers".ljust(20) + cells)
 
 
-def observations():
-    """Run the pipeline and pair up departments admitting through two exams."""
-    with contextlib.redirect_stdout(sys.stderr):
-        rows = rank_uac.build_rows()
-    resolved = attach_apply_tops(rows)
-    distributions = ceec_score.ScoreDistributions.load(path("ceec-scores.tsv"))
+def source_rows():
+    """Load only the admission rows that provide national percentile bars.
+
+    This intentionally avoids ``rank_uac.build_rows()``. Pool fitting needs raw
+    thresholds, not the department-ranking bridge, so unrelated ranking paths
+    cannot change this experimental input.
+    """
+    distributions = ceec_score.ScoreDistributions.load(
+        path("ceec-scores.tsv"), path("tongce-scores.tsv")
+    )
+    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
+    uac_rows = list(rank_uac.load("uac", distributions))
+    tech_rows = list(rank_uac.load("tech", distributions))
+    rank_uac.unify_spelling(uac_rows + tech_rows)
+    known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
+    apply_rows = rank_uac.joinable(list(rank_uac.load_apply(cohort)), known)
     tech_apply = load_tech_apply(distributions)
-    rows += tech_apply
+    rows = uac_rows + tech_rows + apply_rows + tech_apply
     rank_uac.unify_spelling(rows)
+    return rows, len(apply_rows), len(tech_apply)
+
+
+def observations():
+    """Pair departments admitting through two exams on their raw thresholds."""
+    rows, apply_rows, tech_apply = source_rows()
+    resolved = attach_apply_tops(rows)
     matched = model.matched(rows, exam_of, top_of)
-    print(f"{resolved} 個人申請 bars read against the 學測 cohort", file=sys.stderr)
-    print(f"{len(tech_apply)} 四技申請 bars read against the 學測 cohort", file=sys.stderr)
+    print(f"{resolved} of {apply_rows} 個人申請 bars read against the 學測 cohort",
+          file=sys.stderr)
+    print(f"{tech_apply} 四技申請 bars read against the 學測 cohort", file=sys.stderr)
     return rows, matched
 
 
@@ -146,7 +163,7 @@ def main():
         return
     exams = sorted({e for o in matched for e in (o[0], o[2])})
     sizes = taker_counts()
-    fitted, error = model.fit(matched, exams, sizes, bins=BINS)
+    fitted, error = model.fit_two_line(matched, exams, sizes)
     report(fitted, matched, error)
     from pool.plot import draw
 

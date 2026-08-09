@@ -59,6 +59,19 @@ class TestAbility(unittest.TestCase):
         np.testing.assert_allclose(smaller.density("b"), larger.density("b"))
         np.testing.assert_allclose(larger.density("a"), 10 * smaller.density("a"))
 
+    def test_uniform_linear_pool_is_its_own_percentile(self):
+        linear = pool.LinearAbilityPool({"e": [1.0, 1.0, 1.0]}, {"e": 10})
+        for top in (0.0, 0.1, 0.25, 0.5, 0.75, 1.0):
+            self.assertAlmostEqual(linear.ability("e", top), 1 - top, places=9)
+
+    def test_linear_pool_integrates_to_every_exam_count(self):
+        linear = pool.LinearAbilityPool(
+            {"a": [1.5, 1.0, 0.5], "b": [0.5, 1.0, 1.5]},
+            {"a": 30, "b": 70},
+        )
+        for exam in linear.exams:
+            self.assertAlmostEqual(linear.bin_counts(exam).sum(), linear.sizes[exam])
+
 
 class TestMatched(unittest.TestCase):
     def rows(self):
@@ -94,6 +107,16 @@ class TestMatched(unittest.TestCase):
         got = pool.matched(rows, lambda r: r["exam"], lambda r: r["top"])
         # (0.10*30 + 0.30*10) / 40
         self.assertAlmostEqual(got[0][1], 0.15)
+
+    def test_matched_groups_keep_pairs_with_their_department(self):
+        got = pool.matched_groups(
+            self.rows(), lambda row: row["exam"], lambda row: row["top"]
+        )
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][0], ("110", "A", "X"))
+        self.assertEqual(got[0][1], pool.matched(
+            self.rows(), lambda row: row["exam"], lambda row: row["top"]
+        ))
 
 
 class TestTechApplyRows(unittest.TestCase):
@@ -186,6 +209,27 @@ class TestFit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing observed taker counts"):
             pool.fit(observations, ["a", "b"], {"a": 90})
 
+    def test_two_line_fit_caps_exam_density_at_the_original_cohort(self):
+        observations = [
+            ("gsat", 0.1, "tongce", 0.2, 1.0),
+            ("gsat", 0.2, "zhikao", 0.2, 1.0),
+            ("tongce", 0.3, "zhikao", 0.3, 1.0),
+        ]
+        sizes = {"gsat": 100, "tongce": 80, "zhikao": 20}
+        fitted, _ = pool.fit_two_line(
+            observations, sorted(sizes), sizes, require_unimodal=False
+        )
+        cohort = pool.cohort_size(sizes)
+        self.assertEqual(fitted.values["zhikao"][-1], 0.0)
+        for exam, values in fitted.values.items():
+            self.assertTrue((values <= cohort / sizes[exam] + 1e-9).all())
+
+    def test_linear_parameter_count_keeps_gsat_and_tongce_tails_free(self):
+        exams = ["gsat", "tongce", "zhikao"]
+        self.assertEqual(pool.linear_degrees(exams, 2, ("zhikao",)), 5)
+        self.assertEqual(pool.linear_degrees(exams, 2), 6)
+        self.assertEqual(pool.linear_degrees(exams, 3, ("zhikao",)), 8)
+
 
 class TestPlotCommand(unittest.TestCase):
     def test_main_wires_observations_counts_fit_and_draw(self):
@@ -195,14 +239,13 @@ class TestPlotCommand(unittest.TestCase):
                                return_value=([], observations)):
             with mock.patch.object(pool_fit, "taker_counts",
                                    return_value={"a": 10, "b": 20}):
-                with mock.patch.object(pool_plot.model, "fit",
+                with mock.patch.object(pool_plot.model, "fit_two_line",
                                        return_value=(fitted, 1.5)) as fit:
                     with mock.patch.object(pool_plot, "draw",
                                            return_value="figure.png") as draw:
                         pool_plot.main()
         fit.assert_called_once_with(
             observations, ["a", "b"], {"a": 10, "b": 20},
-            bins=pool_fit.BINS,
         )
         draw.assert_called_once()
 
