@@ -21,6 +21,7 @@ Conditional independence given ability turns every probability here into one
 integral over ability, which Gauss-Hermite settles in a few vector operations.
 """
 
+import collections
 import math
 
 import numpy as np
@@ -59,6 +60,11 @@ def rank_score(percentile):
     differences are lands in this measurement's noise term.
     """
     return special.ndtri(1.0 - np.asarray(percentile, dtype=float) / 100.0)
+
+
+def rank_percentile(score):
+    """The within-school rank a normal score came from."""
+    return 100.0 * (1.0 - special.ndtr(np.asarray(score, dtype=float)))
 
 
 class Gates:
@@ -306,8 +312,11 @@ def fit(observations, sizes, segments, loadings=LOADED, nodes=96, floor=0.2,
     return pool, disagreement(pool, observations, exams)
 
 
-def load(year=None):
-    """Every bar the fit compares, paired inside its department."""
+Loaded = collections.namedtuple("Loaded", "groups sizes rows cohort")
+
+
+def load():
+    """Every bar the fit compares, with the rows and cohort behind them."""
     import ceec_score
     from lib.paths import path
     from pool import bars, fit as pool_fit
@@ -316,7 +325,7 @@ def load(year=None):
     pool_fit.attach_apply_tops(rows)
     cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
     groups = bars.observations(rows, pool_fit.exam_of, pool_fit.top_of, cohort)
-    return groups, pool_fit.taker_counts()
+    return Loaded(groups, pool_fit.taker_counts(), rows, cohort)
 
 
 def report(pool, observations, error):
@@ -345,9 +354,9 @@ def report(pool, observations, error):
 def main():
     from pool import bars, fit as pool_fit
 
-    groups, sizes = load()
-    observations = bars.flatten(groups)
-    pool, error = fit(observations, sizes, pool_fit.BENDS)
+    got = load()
+    observations = bars.flatten(got.groups)
+    pool, error = fit(observations, got.sizes, pool_fit.BENDS)
     report(pool, observations, error)
 
 

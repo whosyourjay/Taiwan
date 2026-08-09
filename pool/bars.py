@@ -73,8 +73,8 @@ def merge(bars):
     return Bar(bars[0].exam, seats, top=top)
 
 
-def observations(rows, exam_of, top_of, cohort, key=None):
-    """Group rows by department, then pair every bucket that department filled."""
+def collect(rows, exam_of, top_of, cohort, key=None):
+    """One bar per department and bucket, keyed by department."""
     if key is None:
         key = lambda row: (row["year"], row["school"], row["dept"])
     groups = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -85,10 +85,14 @@ def observations(rows, exam_of, top_of, cohort, key=None):
         bar = bar_of(row, exam, top_of, cohort)
         if bar is not None:
             groups[key(row)][bucket_of(row, exam)].append(bar)
+    return {group: {name: merge(found) for name, found in by_bucket.items()}
+            for group, by_bucket in groups.items()}
 
+
+def observations(rows, exam_of, top_of, cohort, key=None):
+    """Group rows by department, then pair every bucket that department filled."""
     out = []
-    for group, by_bucket in groups.items():
-        merged = {name: merge(found) for name, found in by_bucket.items()}
+    for group, merged in collect(rows, exam_of, top_of, cohort, key).items():
         names = sorted(merged)
         pairs = [(merged[left], merged[right],
                   min(merged[left].seats, merged[right].seats))

@@ -236,6 +236,14 @@ stronger departments would bias it. And on the real bars every loading fits near
 saying the gates do not yet pin it hard. The fit does recover a planted loading
 on generated bars, so that number is the data talking, not the estimator.
 
+`python3 -m pool.diagnose` prints the same fit department by department, each one
+read twice: once with every bar exact, once under the fitted loadings. Across
+2,432 departments the loadings move a level by 0.49 points on average and 9.08 at
+most, and mean disagreement between a department's paths falls from 12.95 points
+to 12.60. It also ranks what the 檢定 gates add to a 繁星 rank bar, which reaches
+18.6 points where a loose rank bar sits behind strict gates. That lift is the
+evidence the loadings are fitted from.
+
 ## Sources
 
 一般大學, 分發入學 (學測 + 分科測驗). 各系組最低錄取標準及錄取人數一覽表:
@@ -342,6 +350,7 @@ Run commands from the repository root. Install Python packages with
     python3 pool/fit.py        # joint fit report + pool-densities.png
     python3 -m pool.plot       # redraw only pool-densities.png
     python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~40s
+    python3 -m pool.diagnose   # the same fit, department by department, ~40s
     python3 -m unittest
 
 Both CAC fetchers take the schools named in their `WANT` list, or every school
@@ -359,7 +368,8 @@ Off to the side, `diagnose.py` prints path scores for a fixed department sample.
 `python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
 exam-population model, `pool/compare.py` ranks its candidates on held-out
 departments, and `pool/factor.py` adds a noise level per measurement, reading
-the bars `pool/bars.py` builds.
+the bars `pool/bars.py` builds. `pool/diagnose.py` is to that fit what
+`diagnose.py` is to the rankings.
 
 `parse.apply` needs tesseract with traditional Chinese:
 
