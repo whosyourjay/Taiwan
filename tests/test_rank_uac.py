@@ -22,6 +22,16 @@ class TestApplicationGroup(unittest.TestCase):
         self.assertEqual(row["application_group"], "法律學系司法組")
 
 
+class TestStar(unittest.TestCase):
+    def test_eighth_group_keeps_quota_and_screen_count_separate(self):
+        rows = list(rank_uac.load_star("eight"))
+        ntu_medicine = next(r for r in rows if r["year"] == "110"
+                            and r["school"] == "國立臺灣大學" and r["dept"] == "醫學系")
+        self.assertEqual(ntu_medicine["path"], "star_eight")
+        self.assertEqual(ntu_medicine["screened"], 24)
+        self.assertEqual(ntu_medicine["seats"], 12)
+
+
 class TestCurve(unittest.TestCase):
     def test_spans_the_seats(self):
         data = rows([(0.9, 10), (0.5, 10), (0.7, 10)])
@@ -98,6 +108,18 @@ class TestAggregate(unittest.TestCase):
         got = rank_uac.aggregate(data, lambda r: (r["school"], r["dept"]))[0]
         self.assertAlmostEqual(got["score"], 75.0)
         self.assertAlmostEqual(got["seats_avg"], 20.0)
+
+    def test_eighth_star_screen_has_its_own_path_in_the_composite(self):
+        data = [
+            {"school": "S", "dept": "D", "year": "114", "system": "uac",
+             "path": "uac", "score": 20.0, "seats": 10},
+            {"school": "S", "dept": "D", "year": "114", "system": "uac",
+             "path": "star_eight", "score": 100.0, "seats": 10},
+        ]
+        got = rank_uac.aggregate(data, lambda r: (r["school"], r["dept"]))[0]
+        self.assertAlmostEqual(got["score"], 60.0)
+        self.assertAlmostEqual(got["seats_avg"], 20.0)
+        self.assertAlmostEqual(got["by_path"]["star_eight"], 100.0)
 
 
 class TestCoverageGaps(unittest.TestCase):

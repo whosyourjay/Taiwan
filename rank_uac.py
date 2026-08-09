@@ -32,16 +32,19 @@ import gender
 from lib import tsvio
 
 HERE = os.path.dirname(__file__)
-PATHS = ("uac", "tech", "star", "apply")
+PATHS = ("uac", "tech", "star", "star_eight", "apply")
 SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
 ADMISSION_TOTALS = "admission-totals.tsv"
 # The 學測 routes into 一般大學, each its own exam field. `system` stays the kind
 # of institution; `path` is how the seat was won.
-EXTRA = {"star": "star-cutoffs.tsv", "apply": "apply-cutoffs.tsv"}
-# Paths whose `basis` is already a share of a national cohort. Re-ranking these
-# against the collected rows would replace an absolute number with a position
-# inside whatever sample we happen to hold.
-ABSOLUTE = {"apply", "star"}
+EXTRA = {
+    "star": "star-cutoffs.tsv",
+    "star_eight": "star-cutoffs.tsv",
+    "apply": "apply-cutoffs.tsv",
+}
+# Paths with an externally defined percentile. Re-ranking them against the
+# collected rows would replace their reported value with a partial-sample rank.
+ABSOLUTE = {"apply", "star", "star_eight"}
 # A 篩選 bar this much of the cohort clears did not screen anyone out.
 NON_BINDING = 0.95
 
@@ -82,21 +85,26 @@ def load(system, distributions=None):
         yield row
 
 
-def load_star():
+def load_star(group="one2seven"):
     """繁星推薦 rows, ordered so that bigger is better.
 
     `gpa` is the marginal admittee's rank inside their own school, where 1%
-    beats 17%, so it is negated to match every other path. 第八類學群 reports
-    通過篩選 ahead of a 甄試 rather than admission, and is left out.
+    beats 17%, so it is negated to match every other path. 第八類學群 publishes
+    a pre-interview screen, so it keeps its own path and uses its quota rather
+    than its screened count as the aggregation weight.
     """
     for row in tsvio.read_rows(os.path.join(HERE, EXTRA["star"])):
         admitted = int(row["admitted"] or 0)
-        if row["group"] == "eight" or not row["gpa"] or not admitted:
+        if row["group"] != group or not row["gpa"] or not admitted:
             continue
-        row["system"], row["path"] = "uac", "star"
+        row["system"] = "uac"
+        row["path"] = "star" if group == "one2seven" else "star_eight"
         row["school"] = row["college"]
         identify_department(row)
-        row["seats"] = admitted
+        row["screened"] = admitted
+        row["seats"] = int(row["quota"] or 0) if group == "eight" else admitted
+        if not row["seats"]:
+            continue
         row["norm"] = -float(row["gpa"])
         # A within-school percentile is already absolute, so it skips curving.
         row["basis"] = 100.0 - float(row["gpa"])
@@ -350,13 +358,18 @@ def build_rows():
     unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     extra = {}
-    for path, loader in (("star", load_star), ("apply", lambda: load_apply(cohort))):
+    loaders = (
+        ("star", load_star),
+        ("star_eight", lambda: load_star("eight")),
+        ("apply", lambda: load_apply(cohort)),
+    )
+    for path, loader in loaders:
         got = list(loader())
         kept = joinable(got, known)
         extra[path] = kept
         print(f"{path}: {len(kept)} of {len(got)} rows join a 分發入學 department")
 
-    rows = uac_rows + tech_rows + extra["star"] + extra["apply"]
+    rows = uac_rows + tech_rows + extra["star"] + extra["star_eight"] + extra["apply"]
     unify_spelling(rows)
     # Keep the validated 統測 bridge on the old fraction-of-maximum ordering.
     # CEEC improves repeatability inside UAC, but using it as the bridge target
@@ -392,7 +405,11 @@ def build_rows():
     # incomplete coverage redefining the bridge fit.
     curve(uac_rows + tech_rows, "merged", "rank_basis", lambda r: r["year"])
     uac_score = by_dept(uac_rows, "rank_basis")
-    for path, path_rows in extra.items():
+    bridge_paths = (
+        ("star", extra["star"] + extra["star_eight"], ("star", "star_eight")),
+        ("apply", extra["apply"], ("apply",)),
+    )
+    for path, path_rows, outputs in bridge_paths:
         intercept, slope, stats = fit_bridge(uac_score, by_dept(path_rows))
         print(
             f"bridge: rank = {intercept:.3f} + {slope:.4f} * {path}"
@@ -400,11 +417,15 @@ def build_rows():
             f"  ({stats['depts']} depts, {stats['schools']} schools,"
             f" {path} {stats['lo']:.1f}-{stats['hi']:.1f})"
         )
-        for row in path_rows:
-            row["rank_basis"] = intercept + slope * row["pct"]
+        for output in outputs:
+            for row in extra[output]:
+                row["rank_basis"] = intercept + slope * row["pct"]
 
     # Report missing coverage without assigning those seats a rank.
-    gaps, residual = coverage_gaps(rows, load_admission_totals())
+    # 第八類 is part of the official 繁星 total but publishes a screen count,
+    # not an admission count, so it has no independent coverage total.
+    covered_rows = [row for row in rows if row["path"] != "star_eight"]
+    gaps, residual = coverage_gaps(covered_rows, load_admission_totals())
     curve(rows, "rank_basis", "score", lambda r: r["year"])
     by_path = collections.Counter()
     for (_, path), missing in residual.items():

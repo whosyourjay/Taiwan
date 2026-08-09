@@ -10,18 +10,18 @@ Covers both admission systems, on one scale: 141 institutions, 3,040 departments
 For scale, 114學年度 had 121,181 學測 takers and 66,311 統測 takers; 39,190
 of the academic-track students also took 分科測驗.
 
-| Path | How it works | 114學年度 national scale | Coverage here |
+| Path | How it works | Seats | Our coverage |
 | --- | --- | ---: | --- |
-| 一般大學 分發入學 | 指考 + ranked preferences | 32,497 admitted | Full, 108–114 |
-| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 admitted | 64 schools, 110–111 |
-| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 admitted | 62 schools, 110–111 |
-| 一般大學 其他管道 | Special selection and school-run admissions | 5,087 admitted | Not handled |
-| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 admitted | Full general intake, 108–114 |
-| 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 admitted | Count only; not scored |
-| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 admitted | Bridge evidence, 110 |
-| 四技二專 技優保送 / 甄審 | Competition results; direct or screened placement | 228 / 3,078 admitted | Not handled |
-| 四技二專 特殊選才 | Skills, experience, or talent | 512 admitted | Not handled |
-| 科技校院 繁星推薦 | School recommendation + rank | 1,976 admitted | Not handled |
+| 一般大學 分發入學 | 指考 + ranked preferences | 32,497 | Full, 108–114 |
+| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 | 64 schools, 110–111 |
+| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 | 62 schools, 110–111 |
+| 一般大學 其他管道 | Special selection and school-run admissions | 5,087 | Not handled |
+| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 | Full general intake, 108–114 |
+| 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 | Count only; not scored |
+| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 | Bridge evidence, 110 |
+| 四技二專 技優保送 / 甄審 | Competition results; direct or screened placement | 228 / 3,078 | Not handled |
+| 四技二專 特殊選才 | Skills, experience, or talent | 512 | Not handled |
+| 科技校院 繁星推薦 | School recommendation + rank | 1,976 | Not handled |
 
 The two final-cutoff routes contain 48,394 named admissions in 114. The partial
 繁星 and 個申 samples add rank evidence only where a row passes validation and
@@ -43,7 +43,7 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
   department merging
 
 Columns: `rank school school_en [dept dept_en [application_group
-application_group_en]] score years last_year seats_avg uac tech star apply men
+application_group_en]] score years last_year seats_avg uac tech star star_eight apply men
 women pct_women`
 
 `school_en`, `dept_en` and `application_group_en` are intentionally blank join
@@ -53,7 +53,8 @@ slots. English-name mappings are maintained outside this repository.
   paths by average annual admitted seats.
 - `years` — number of distinct admission years represented by any covered path.
 - `seats_avg` — the sum of average annual seats in each collected admission path.
-- `uac`, `tech`, `star`, `apply` — the entity's score within each available path.
+- `uac`, `tech`, `star`, `star_eight`, `apply` — the entity's score within each
+  available path. `star_eight` is 第八類醫牙's pre-interview 繁星 screen.
 - `men`, `women`, `pct_women` — enrolled bachelor headcount, blank where 教育部
   has no matching department and for every application group. See Auxiliary
   gender join below.
@@ -77,7 +78,8 @@ slots. English-name mappings are maintained outside this repository.
 | --- | --- |
 | 分發入學 | CEEC equal-subject percentile; calibrated `norm` fallback for 術科 rows |
 | 聯合登記分發 | `norm` |
-| 繁星推薦 | `100 - high-school rank percentile` |
+| 繁星推薦（第一至七類） | `100 - high-school rank percentile` |
+| 繁星推薦第八類醫牙 | `100 - high-school rank percentile`; pre-interview screen |
 | 個人申請 | National 學測 percentile at the last binding first-stage screen |
 
    For 分發, let `Q_i(p)` be subject `i`'s CEEC score at percentile `p`, then
@@ -86,9 +88,11 @@ slots. English-name mappings are maintained outside this repository.
     sum(weight_i * Q_i(p)) = cutoff
 
    This covers 12,225 of 12,656 rows. The 431 術科 rows retain their within-year
-   `norm` position. 繁星 excludes pre-interview 第八類 rows. 個申 drops
-   non-binding screens and OCR failures. Both partial paths require a same-year
-   分發 department match.
+   `norm` position. 第八類醫牙 stays on a separate pre-interview 繁星 path and
+   uses its final quota, not its screen count, as its weight. It shares the
+   ordinary 繁星 class-rank bridge but remains a separate aggregation path. 個申
+   drops non-binding screens and OCR failures. Both partial paths require a
+   same-year 分發 department match.
 
 3. Convert 分發 and 聯登 rows to seat-weighted midranks within `(year, path)`:
 
@@ -100,7 +104,7 @@ slots. English-name mappings are maintained outside this repository.
 | Source path | Target | Fit |
 | --- | --- | --- |
 | 聯合登記分發 | 分發入學 | `uac = -15.11 + 0.7433 * tech` (`R² = 0.412`, `n = 315`) |
-| 繁星推薦 | Provisional UAC rank | `rank = -54.85 + 1.5107 * star` (`R² = 0.709`, `n = 1,571`) |
+| 繁星推薦（含第八類） | Provisional UAC rank | `rank = -55.64 + 1.5235 * star` (`R² = 0.715`, `n = 1,595`) |
 | 個人申請 | Provisional UAC rank | `rank = -12.02 + 1.0870 * apply` (`R² = 0.713`, `n = 1,078`) |
 
    Fit the tech bridge on `norm` order; CEEC order raises leave-one-school-out
@@ -124,10 +128,10 @@ headcounts on normalized department names and matches 2,407 of 3,040 rows.
 
 - The tech bridge has `R² = 0.412` across 315 matched department-years at six
   universities. Treat close 科大 ranks as ties, especially near the top.
-- 繁星 and 個申 publish screening-stage evidence, not final admitted cutoffs.
-  第八類醫牙 繁星 rows are excluded, and 個申 seat counts use quota times the
-  national fill rate. Adding these paths can therefore move well-covered
-  non-medical departments relative to medical departments.
+- 個申 and 第八類醫牙繁星 publish screening-stage evidence, not final admitted
+  cutoffs. 個申 seat counts use quota times the national fill rate. Adding these
+  paths can therefore move well-covered non-medical departments relative to
+  medical departments.
 - CEEC publishes marginal subject distributions. The 分發 conversion assumes
   one percentile across every selected subject; it cannot recover the admitted
   student's actual subject-score vector.
