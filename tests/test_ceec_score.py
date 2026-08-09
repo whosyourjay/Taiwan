@@ -1,5 +1,7 @@
 import unittest
 
+import numpy as np
+
 from ceec_score import ScoreDistributions, calibrate_fallbacks
 from parse.ceec import mark_midpoint
 
@@ -55,6 +57,55 @@ class TestScoreDistributions(unittest.TestCase):
         self.assertIsNone(
             self.scores.gsat_percentile("114", "國文x1.00", 10)
         )
+
+
+def bisect_percentile(scores, subjects, cutoff):
+    """The bisection that `solve` replaced, kept as an independent answer."""
+    low, high = 0.0, 1.0
+    for _ in range(60):
+        middle = (low + high) / 2
+        total = sum(w * scores.subject_score(k, middle) for k, w in subjects)
+        low, high = (middle, high) if total < cutoff else (low, middle)
+    return (low + high) / 2
+
+
+class TestSolve(unittest.TestCase):
+    """`solve` inverts the weighted total exactly instead of bisecting for it."""
+
+    def random_scores(self, rng, names):
+        rows = []
+        for name in names:
+            marks = sorted(rng.integers(0, 100, int(rng.integers(2, 12))).tolist())
+            seats = rng.integers(1, 500, len(marks)).tolist()
+            rows += score_rows("114", "zhikao", name, list(zip(marks, seats)))
+        return ScoreDistributions(rows)
+
+    def test_matches_bisection_on_random_distributions(self):
+        rng = np.random.default_rng(20260809)
+        for _ in range(300):
+            names = ["a", "b", "c"][: int(rng.integers(1, 4))]
+            scores = self.random_scores(rng, names)
+            subjects = [
+                (("114", "zhikao", name), round(float(rng.uniform(0.5, 3)), 2))
+                for name in names
+            ]
+            grid, table = scores.score_table(tuple(k for k, _ in subjects))
+            totals = np.array([w for _, w in subjects]) @ table
+            cutoff = float(rng.uniform(totals.min() - 5, totals.max() + 5))
+            got = scores.solve(subjects, cutoff)
+            self.assertAlmostEqual(
+                got, bisect_percentile(scores, subjects, cutoff), places=6
+            )
+
+    def test_reproduces_the_cutoff_it_was_given(self):
+        scores = self.random_scores(np.random.default_rng(7), ["a", "b"])
+        subjects = [(("114", "zhikao", "a"), 1.0), (("114", "zhikao", "b"), 2.0)]
+        _, table = scores.score_table(tuple(k for k, _ in subjects))
+        totals = np.array([w for _, w in subjects]) @ table
+        for cutoff in np.linspace(totals[0], totals[-1], 25):
+            percentile = scores.solve(subjects, float(cutoff))
+            total = sum(w * scores.subject_score(k, percentile) for k, w in subjects)
+            self.assertAlmostEqual(total, float(cutoff), places=6)
 
 
 class TestParseMarks(unittest.TestCase):
