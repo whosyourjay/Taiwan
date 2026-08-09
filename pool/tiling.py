@@ -20,6 +20,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
+from scipy import interpolate
 
 import rank_uac
 from lib import tsvio
@@ -118,9 +119,66 @@ def curve(points):
     return tops, isotonic(levels, weights)
 
 
+def knots(tops, levels, weights, count):
+    """Thin the curve to `count` places, each carrying the same weight of seats.
+
+    Seats rather than bars, so a stretch of the axis that many students actually
+    sit in gets the detail, and a long tail of tiny departments does not.
+    """
+    carried = np.cumsum(weights)
+    wanted = np.linspace(0.0, carried[-1], count + 1)[1:]
+    picked = sorted({0} | {int(np.searchsorted(carried, w)) for w in wanted})
+    picked = [i for i in picked if i < len(tops)]
+    return np.array(tops)[picked], np.array(levels)[picked]
+
+
+def smooth(points, count=24):
+    """A curve with a derivative, so it can be differentiated into a density.
+
+    Isotonic output is a staircase, and the height of a step says nothing except
+    that the fit ran out of evidence to separate its bars. A shape-preserving
+    cubic through evenly weighted knots keeps the curve rising and gives it the
+    smooth slope the density needs.
+    """
+    tops, levels, weights = pooled(points)
+    fitted = isotonic(levels, weights)
+    # Read from the bottom up, so both axes rise and the spline stays monotone.
+    bottoms, rising = knots(1.0 - tops[::-1], fitted[::-1], weights[::-1], count)
+    return interpolate.PchipInterpolator(bottoms, rising, extrapolate=True)
+
+
+def seat_density(placed, bins=160, window=9):
+    """Seats per exam across the admitted pool, which by construction fills it.
+
+    Each admit holds one seat on one path, so at any ability the paths divide the
+    pool between them and their shares add to one. Nothing here assumes who sat
+    which exam — a student sitting two of them still holds a single seat, so the
+    double counting that dogged the taker pools cannot arise.
+    """
+    total = sum(seats for *_, seats in placed)
+    counts = collections.defaultdict(lambda: np.zeros(bins))
+    above = 0.0
+    for _, exam, _, seats in placed:
+        low, above = above, above + seats
+        # Spread the department's seats over the slice of the pool they fill.
+        edges = np.clip(np.arange(bins + 1) * total / bins, low, above)
+        counts[exam] += np.diff(edges) * bins / total
+    box = np.ones(window) / window
+    edge = np.convolve(np.ones(bins), box, mode="same")
+    # `placed` runs best first, so the bins came out with the top of the pool at
+    # index zero. Turn them round to read low ability first, like every axis here.
+    return ({exam: (np.convolve(got, box, mode="same") / edge)[::-1]
+             for exam, got in counts.items()}, total)
+
+
 def curves(points):
     """Every exam's curve, built once so a caller can read it many times."""
     return {exam: curve(got) for exam, got in points.items()}
+
+
+def splines(points, count=24):
+    """Every exam's smoothed curve."""
+    return {exam: smooth(got, count) for exam, got in points.items()}
 
 
 def ability(fitted, tops):
@@ -173,9 +231,10 @@ def main():
     points, total = tile(placed)
     fitted = curves(points)
     report(points, fitted, total, held)
+    shares, _ = seat_density(placed)
     from pool.tiling_plot import draw
 
-    print(f"\nwrote {draw(points, fitted, total)}")
+    print(f"\nwrote {draw(points, fitted, splines(points), shares, total)}")
 
 
 if __name__ == "__main__":
