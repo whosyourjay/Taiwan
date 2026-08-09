@@ -22,6 +22,8 @@ import rank_uac
 
 PATHS = rank_uac.PATHS
 DEPTS_PER_SCHOOL = 5
+# Wide enough for the longest path name, so a header never runs into its neighbour.
+COLUMN = max(8, max(len(path) for path in PATHS) + 1)
 
 # Always shown where a school has them, since the two hardest departments in the
 # country are the ones worth watching a bridge against.
@@ -123,7 +125,7 @@ def main():
     table = by_path(rows)
 
     head = pad("department", 26) + f"{'seats/yr':>9}"
-    head += "".join(f"{p:>8}" for p in PATHS) + f"{'spread':>9}"
+    head += "".join(f"{p:>{COLUMN}}" for p in PATHS) + f"{'spread':>9}"
     for school, kind in SCHOOLS:
         depts = pick(table, school)
         print(f"\n{school}  ({kind})")
@@ -136,7 +138,8 @@ def main():
             seats = sum(s for _, s in paths.values())
             line = "  " + pad(dept, 26) + f"{seats:>9.1f}"
             for path in PATHS:
-                line += f"{paths[path][0]:>8.1f}" if path in paths else f"{'-':>8}"
+                line += (f"{paths[path][0]:>{COLUMN}.1f}" if path in paths
+                         else f"{'-':>{COLUMN}}")
             scores = [v[0] for v in paths.values()]
             gap = max(scores) - min(scores)
             line += f"{gap:>9.1f}" if len(scores) > 1 else f"{'':>9}"
@@ -145,9 +148,9 @@ def main():
     print("\nScores are 0-100 over admitted seats nationally, so they are"
           " comparable across paths.")
     print("A blank spread means only one path was collected for that department.")
-    print(f"{'/'.join(PINNED)} never show a 繁星 score: those are 第八類學群,"
-          " which reports 通過篩選")
-    print("ahead of a 甄試 rather than admission, so load_star() excludes them.")
+    print(f"{'/'.join(PINNED)} score under star_eight rather than star: 第八類學群"
+          " publishes a 通過篩選")
+    print("bar ahead of its 甄試, so it keeps its own path and weighs by quota.")
 
     print(f"\nSeat coverage, year {SCALE_YEAR}")
     head = pad("path", 14) + f"{'official':>10}{'observed':>10}{'unranked':>10}{'%':>7}"
