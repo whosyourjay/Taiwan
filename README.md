@@ -13,8 +13,8 @@ of the academic-track students also took 分科測驗.
 | Path | How it works | 114學年度 national scale | Coverage here |
 | --- | --- | ---: | --- |
 | 一般大學 分發入學 | 指考 + ranked preferences | 32,497 admitted | Rank + denominator: full, 108–114 |
-| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 admitted | Rank: 8 schools, 110–111; denominator: full, 108–114 |
-| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 admitted | Rank: 8 schools, 110–111; denominator: full, 108–114 |
+| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 admitted | Rank: 64 schools, 110–111; denominator: full, 108–114 |
+| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 admitted | Rank: 62 schools, 110–111; denominator: full, 108–114 |
 | 一般大學 其他管道 | Special selection and school-run admissions | 5,087 admitted | Not handled |
 | 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 admitted | Rank: full general intake; denominator: full, 108–114 |
 | 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 admitted | Denominator only: full, 108–114 |
@@ -132,8 +132,8 @@ paths. Each match receives the smaller of its two seat counts as weight.
 | Source path | Target | Fit |
 | --- | --- | --- |
 | 聯合登記分發 | 分發入學 | `uac = -15.11 + 0.7433 * tech` (`R² = 0.412`, `n = 315`) |
-| 繁星推薦 | Provisional UAC rank | `rank = 86.87 + 0.0988 * star` (`R² = 0.205`, `n = 355`) |
-| 個人申請 | Provisional UAC rank | `rank = 87.40 + 0.0910 * apply` (`R² = 0.179`, `n = 258`) |
+| 繁星推薦 | Provisional UAC rank | `rank = -54.85 + 1.5107 * star` (`R² = 0.709`, `n = 1,571`) |
+| 個人申請 | Provisional UAC rank | `rank = -12.02 + 1.0870 * apply` (`R² = 0.713`, `n = 1,078`) |
 
 The tech bridge uses `norm`-ordered percentiles on both sides. Replacing its UAC
 target with the CEEC order raises leave-one-school-out error from 11.60 to 12.63
@@ -221,15 +221,18 @@ split into 第一類至第七類學群 and 第八類學群 (medicine):
 
     https://www.cac.edu.tw/cacportal/star_his_report/{year}/{year}_result_standard/{one2seven,eight}/{code}/{year}Standard_{code}.pdf
 
-Text PDFs in fixed columns. Downloaded for 8 schools over 110-111 only, into
-`star/` -> `star-cutoffs.tsv`. See Method.
+Text PDFs in fixed columns. Downloaded for every school listed in 110 and 111,
+into `star/` -> `star-cutoffs.tsv`. See Method.
 
 一般大學, 個人申請 (學測). 第一階段篩選標準一覽表:
 
     https://www.cac.edu.tw/cacportal/apply_his_report/{year}/{year}_sieve_standard/report/pict/{code}.png
 
-One PNG per school, downloaded for the same 8 schools and years into `apply/`
+One PNG per school, downloaded for the same schools and years into `apply/`
 and OCR'd into `apply-cutoffs.tsv`. See Method.
+
+技專校院入學測驗中心, 統測 成績人數累計表 (open data 報表B2). One PDF a year,
+saved by hand as `tech/tcte-{year}-scores.pdf` for 108-114.
 
 教育部統計處, 大專校院各校科系別學生數, for the gender columns:
 
@@ -250,6 +253,9 @@ Downloaded inputs and auxiliary tables:
   .xls, back to year 91) for 學測 and 分科測驗. `parse_ceec.py` extracts
   108-114 into `ceec-scores.tsv`; these distributions refine the ordering of
   分發入學 cutoffs as described in Method.
+- `tech/tcte-*-scores.pdf` — 統測 成績人數累計表, one-point bands over 42
+  subjects. `parse_tcte.py` extracts 108-114 into `tongce-scores.tsv`, matching
+  the columns `parse_ceec.py` writes. Collected, but no path uses it yet.
 - `tech/jctv-*-xuece-screen.pdf` — 科技校院四年制申請入學 第一階段最低篩選標準,
   the 學測 route by which 科大 admit 高中 students. An alternative bridge, but
   it reports a screening threshold rather than a final cutoff.
@@ -258,14 +264,19 @@ Downloaded inputs and auxiliary tables:
 
     python3 parse_uac.py     # uac/*-cutoffs.pdf        -> uac-cutoffs.tsv
     python3 parse_tech.py    # tech/union42-*.pdf       -> tech-cutoffs.tsv
-    python3 fetch_star.py 110 111   # -> star/,  ~2s and 340KB a year
+    python3 fetch_star.py 110 111   # -> star/,  88 PDFs and 3.6MB
     python3 parse_star.py           # star/*.pdf -> star-cutoffs.tsv, ~6 pages/s
-    python3 fetch_apply.py 110 111   # -> apply/, ~7s and 4.4MB
-    python3 parse_apply.py           # OCR apply/*.png -> apply-cutoffs.tsv, ~4min
+    python3 fetch_apply.py 110 111   # -> apply/, 74 PNGs and 21MB
+    python3 parse_apply.py           # OCR apply/*.png -> apply-cutoffs.tsv, ~20s an image
     python3 fetch_ceec.py    # optional, only refreshes ceec/
     python3 parse_ceec.py    # ceec/*.xls -> ceec-scores.tsv
+    python3 parse_tcte.py    # tech/tcte-*-scores.pdf   -> tongce-scores.tsv
     python3 rank_uac.py      # all paths, bridge, gender -> rank-*.tsv
     python3 -m unittest
+
+Both CAC fetchers take the schools named in their `WANT` list, or every school
+the year lists when that list is empty. `star/` and `apply/` hold the whole-year
+download; the eight names still in `fetch_star.py` cut it to a few seconds.
 
 `rank_uac.py` pulls the 教育部 CSV through `gender.py` on first run. The 系組
 name normalisation both it and `gender.py` group by lives in `deptname.py`.
