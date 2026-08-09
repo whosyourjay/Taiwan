@@ -158,33 +158,7 @@ def main():
         print("  " + pad(path, 14)
               + f"{official:>10,}{observed:>10,}{gap:>10,}{100 * gap / official:>6.1f}%")
 
-    # The shipped score counts unranked seats as a floor beneath every ranked
-    # row. That is only defensible where the missing seats really are the weaker
-    # ones, so show the ranked-only axis beside it.
-    rank_uac.curve(rows, "rank_basis", "score_ranked", lambda r: r["year"])
-    floored = scale_endpoints(rows, SCALE_YEAR, "score")
-    ranked = scale_endpoints(rows, SCALE_YEAR, "score_ranked")
-
-    print(f"\nExam scale -> final score, year {SCALE_YEAR}")
-    print("  " + pad("exam", 20) + pad("path", 8)
-          + f"{'input span':>17}{'ranked seats only':>20}{'unranked as floor':>20}")
-    head = pad("", 28) + f"{'lo':>8}{'hi':>9}{'lo':>10}{'hi':>10}{'lo':>10}{'hi':>10}"
-    print("  " + head)
-    print("  " + "-" * width(head))
-    for path in PATHS:
-        if path not in ranked:
-            continue
-        lo, hi, slo, shi = ranked[path]
-        _, _, flo, fhi = floored[path]
-        print("  " + pad(EXAMS[path], 20) + pad(path, 8)
-              + f"{lo:>8.1f}{hi:>9.1f}{slo:>10.1f}{shi:>10.1f}{flo:>10.1f}{fhi:>10.1f}")
-    print("  Placing every unranked seat below every ranked one lifts the whole"
-          " axis off 0.")
-    print("  It only holds where the uncollected seats are genuinely the weaker"
-          " ones, which")
-    print("  is false for 個人申請: 8 elite schools are collected and the rest"
-          " of the country")
-    print("  is not.")
+    print("\nRun fit_pool.py for the taker density each exam draws from.")
 
 
 if __name__ == "__main__":

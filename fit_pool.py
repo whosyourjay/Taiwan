@@ -7,6 +7,7 @@ gap between the abilities they imply is the error to minimise.
 
 import collections
 import contextlib
+import math
 import os
 import sys
 
@@ -69,6 +70,46 @@ def naive_error(observations):
     return 100.0 * total / weight if weight else 0.0
 
 
+GLYPHS = {"gsat": "o", "zhikao": "x", "tongce": "+"}
+NAMES = {"gsat": "學測", "zhikao": "指考/分科測驗", "tongce": "統測"}
+
+
+def plot_densities(pool_fit, height=16, width=66):
+    """Overlaid step plot of every exam's taker density over cohort ability.
+
+    Each exam's takers are a different slice of the same cohort, so drawing them
+    on one axis is the whole point: where the curves separate is where a
+    percentile in one exam stops meaning what it means in the other.
+    """
+    exams = sorted(pool_fit.shares)
+    density = {e: pool_fit.shares[e] * pool_fit.bins for e in exams}
+    ceiling = math.ceil(max(max(d) for d in density.values()) * 10) / 10
+
+    print("\ntaker density over cohort ability"
+          "   (1.00 = spread evenly across the cohort)")
+    for row in range(height, 0, -1):
+        level = ceiling * row / height
+        line = ""
+        for col in range(width):
+            k = min(pool_fit.bins - 1, col * pool_fit.bins // width)
+            hit = [e for e in exams if density[e][k] >= level]
+            line += "#" if len(hit) > 1 else (GLYPHS.get(hit[0], "*") if hit else " ")
+        print(f"  {level:4.2f} |{line}")
+    print("       +" + "-" * width)
+    ticks = "       "
+    for mark in (0, 25, 50, 75, 100):
+        cell = 1 + mark * (width - 1) // 100
+        ticks = ticks.ljust(7 + cell - len(str(mark)) // 2) + str(mark)
+    print(ticks)
+    print(" " * 8 + "cohort ability percentile (100 = top)")
+    print("  " + "   ".join(f"{GLYPHS.get(e, '*')} {NAMES.get(e, e)}" for e in exams)
+          + "   # both")
+    missing = [e for e in NAMES if e not in exams]
+    if missing:
+        print("  not fitted: " + ", ".join(NAMES[e] for e in missing)
+              + " — no published score distribution collected yet")
+
+
 def report(pool_fit, sizes, observations, error):
     print(f"\nfit on {len(observations)} matched departments, {YEAR}")
     print(f"  taking percentiles as comparable: {naive_error(observations):5.2f} points")
@@ -84,6 +125,8 @@ def report(pool_fit, sizes, observations, error):
         shares = pool_fit.shares[exam]
         print("  " + f"{exam:<9}{sizes[exam]:>9,.0f}"
               + "".join(f"{BINS * s:>10.2f}" for s in shares))
+
+    plot_densities(pool_fit)
 
     print("\nwhere a bar lands on the cohort, by exam")
     names = sorted(pool_fit.shares)

@@ -33,19 +33,23 @@ class AbilityPool:
         self.shares = {e: np.asarray(s, dtype=float) for e, s in shares.items()}
         self.bins = bins
 
-    def ability(self, exam, top_fraction):
-        """Cohort percentile of the bar that the top `top_fraction` clears.
+    def abilities(self, exam, top_fractions):
+        """Cohort percentile of each bar that its top fraction clears, 0-1.
 
-        Returns 0-1, where 1 is the top of the cohort.
+        `cum[k]` is the share of takers at or above the foot of bin k, so it
+        falls from 1 to 0 and locating a bar is one search per array.
         """
         share = self.shares[exam]
-        remaining = float(np.clip(top_fraction, 0.0, 1.0))
-        for k in range(self.bins - 1, -1, -1):
-            if remaining <= share[k]:
-                within = remaining / share[k] if share[k] else 0.0
-                return (k + 1 - within) / self.bins
-            remaining -= share[k]
-        return 0.0
+        cum = np.concatenate([np.cumsum(share[::-1])[::-1], [0.0]])
+        tops = np.clip(np.asarray(top_fractions, dtype=float), 0.0, 1.0)
+        # cum reversed runs 0 to 1, so the search lands on cum[k] >= t > cum[k+1].
+        k = self.bins - np.searchsorted(cum[::-1], tops, side="left")
+        k = np.clip(k, 0, self.bins - 1)
+        return (k + 1) / self.bins - (tops - cum[k + 1]) / (share[k] * self.bins)
+
+    def ability(self, exam, top_fraction):
+        """Cohort percentile of the bar that the top `top_fraction` clears."""
+        return float(self.abilities(exam, [top_fraction])[0])
 
     def participation(self, exam, sizes):
         """Takers per bin as a fraction of the cohort slice that bin holds."""
@@ -64,18 +68,42 @@ def _shares_from(params, exams, bins):
     return out
 
 
-def _cost(params, exams, bins, observations, smooth):
-    pool = AbilityPool(_shares_from(params, exams, bins), bins)
-    total = 0.0
-    weight_sum = 0.0
-    for exam_a, top_a, exam_b, top_b, weight in observations:
-        gap = pool.ability(exam_a, top_a) - pool.ability(exam_b, top_b)
-        total += weight * gap * gap
-        weight_sum += weight
-    cost = total / weight_sum if weight_sum else 0.0
+class _Problem:
+    """Observations packed into arrays so a cost evaluation is a few vector ops."""
+
+    def __init__(self, observations, exams, bins):
+        index = {e: i for i, e in enumerate(exams)}
+        self.exams = list(exams)
+        self.bins = bins
+        self.side = []
+        for which in (0, 2):
+            self.side.append((
+                np.array([index[o[which]] for o in observations]),
+                np.array([o[which + 1] for o in observations], dtype=float),
+            ))
+        self.weights = np.array([o[4] for o in observations], dtype=float)
+        self.weight_sum = float(self.weights.sum())
+
+    def gaps(self, pool):
+        out = []
+        for exam_ids, tops in self.side:
+            got = np.empty(len(tops))
+            for i, exam in enumerate(self.exams):
+                mask = exam_ids == i
+                if mask.any():
+                    got[mask] = pool.abilities(exam, tops[mask])
+            out.append(got)
+        return out[0] - out[1]
+
+
+def _cost(params, problem, smooth):
+    pool = AbilityPool(_shares_from(params, problem.exams, problem.bins),
+                       problem.bins)
+    gaps = problem.gaps(pool)
+    cost = float((problem.weights * gaps * gaps).sum()) / problem.weight_sum
     # Without this the fit is free to spike one bin, which fits a few matched
     # departments and says nothing about the cohort.
-    for exam in exams:
+    for exam in problem.exams:
         steps = np.diff(pool.shares[exam])
         cost += smooth * float((steps * steps).sum())
     return cost
@@ -90,6 +118,7 @@ def fit(observations, exams, bins=3, smooth=0.05, restarts=6, seed=20260809):
     """
     if not observations:
         raise ValueError("no matched departments to fit against")
+    problem = _Problem(observations, exams, bins)
     rng = np.random.default_rng(seed)
     best = None
     for attempt in range(restarts):
@@ -97,8 +126,8 @@ def fit(observations, exams, bins=3, smooth=0.05, restarts=6, seed=20260809):
             0.0, 1.0, len(exams) * bins
         )
         got = optimize.minimize(
-            _cost, start, args=(exams, bins, observations, smooth), method="Powell",
-            options={"maxiter": 20000, "xtol": 1e-6, "ftol": 1e-9},
+            _cost, start, args=(problem, smooth), method="Powell",
+            options={"maxiter": 4000, "xtol": 1e-6, "ftol": 1e-9},
         )
         if best is None or got.fun < best.fun:
             best = got
@@ -108,12 +137,12 @@ def fit(observations, exams, bins=3, smooth=0.05, restarts=6, seed=20260809):
 
 def residual(pool, observations):
     """Seat-weighted mean absolute disagreement, in cohort percentile points."""
-    total = weight_sum = 0.0
-    for exam_a, top_a, exam_b, top_b, weight in observations:
-        gap = pool.ability(exam_a, top_a) - pool.ability(exam_b, top_b)
-        total += weight * abs(gap)
-        weight_sum += weight
-    return 100.0 * total / weight_sum if weight_sum else 0.0
+    if not observations:
+        return 0.0
+    exams = sorted({e for o in observations for e in (o[0], o[2])})
+    problem = _Problem(observations, exams, pool.bins)
+    gaps = np.abs(problem.gaps(pool))
+    return 100.0 * float((problem.weights * gaps).sum()) / problem.weight_sum
 
 
 def matched(rows, exam_of, top_of, key=None):
