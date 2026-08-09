@@ -1,16 +1,20 @@
-"""Tie 學測 and 統測 together so the picture cannot slide along the ability axis.
+"""Stop the fitted densities sliding along the ability axis.
 
 Matched thresholds only say where one exam's bar sits relative to another's.
-Warping every density the same way leaves every one of those comparisons intact,
-so independent densities leave the whole picture free to slide and the fit
-settles wherever the spline family happens to bend most cheaply.
+Warping every density the same way leaves all of those comparisons intact, so
+free densities slide: they put 學測 and 統測 together at twice the cohort in
+mid-range and at nothing near the bottom, which no population can do.
 
-Ability here is a percentile inside everyone who sat 學測 or 統測, so it is
-uniform over that cohort by construction, and each student sits one exam or the
-other. Their two densities therefore add up to the cohort at every ability.
-Fitting the 學測 share of the cohort instead of two free densities builds that
-in, which is what pins the placement. 指考 draws again from students who
-already sat 學測, so it keeps a density of its own.
+Counting people rules that out. Ability is a percentile inside the cohort, so
+the cohort's density along it is flat. Three facts then bound the fit. Nobody at
+one ability can be more of the cohort than all of it, which caps each exam.
+Every student sits 學測 or 統測, which puts a floor under those two together.
+And they double-count only the students who sit both, so the two taker counts
+added up exceed the cohort by exactly that overlap, which is all the room the
+floor leaves.
+
+The cohort here is whoever sat at least one of the two, so students who sat
+neither are outside it rather than unaccounted for.
 """
 
 import numpy as np
@@ -22,35 +26,24 @@ ACADEMIC = "gsat"
 VOCATIONAL = "tongce"
 RETAKE = "zhikao"
 EXAMS = (ACADEMIC, RETAKE, VOCATIONAL)
+COVER = (ACADEMIC, VOCATIONAL)
 
 
-class ComplementPool(model.LinearAbilityPool):
-    """學測 and 統測 read off one cohort share, alongside a free 指考."""
+def cohort_size(sizes, overlap):
+    """Students who sat 學測 or 統測, counting those who sat both once.
 
-    def __init__(self, share, retake, sizes):
-        share = np.asarray(share, dtype=float)
-        cohort = model.cohort_size(sizes)
-        super().__init__(
-            {
-                ACADEMIC: cohort * share / sizes[ACADEMIC],
-                VOCATIONAL: cohort * (1.0 - share) / sizes[VOCATIONAL],
-                RETAKE: np.asarray(retake, dtype=float),
-            },
-            sizes,
-        )
-        self.share = share
-
-    def cohort_density(self):
-        """People per unit ability in 學測 and 統測 together, which is flat."""
-        cohort = model.cohort_size(self.sizes)
-        return np.full_like(self.share, cohort)
+    `overlap` is how many sat both, as a share of that cohort.
+    """
+    if overlap < 0:
+        raise ValueError("overlap is a share of the cohort, so it cannot be negative")
+    return sum(sizes[exam] for exam in COVER) / (1.0 + overlap)
 
 
-def degrees(segments, zero_tail):
-    """Free parameters left after the two normalisations and any zero tail."""
+def degrees(segments):
+    """Free ordinates left once each density is normalised."""
     if segments < 1:
         raise ValueError("a linear density needs at least one segment")
-    return 2 * segments - bool(zero_tail)
+    return 3 * segments
 
 
 def trapezoid_weights(nodes):
@@ -60,76 +53,85 @@ def trapezoid_weights(nodes):
     return weights
 
 
-def _pack(params, nodes):
-    """Split the optimiser vector into the share and 指考 ordinates."""
-    return params[:nodes], params[nodes:]
+def _values(params, nodes):
+    """Split the optimiser vector into each exam's spline ordinates."""
+    return {exam: params[i * nodes:(i + 1) * nodes]
+            for i, exam in enumerate(EXAMS)}
 
 
-def _constraints(nodes, sizes, zero_tail, monotone, nested):
-    """Normalisations, plus whichever shape hypotheses the candidate asserts."""
+def _constraints(nodes, sizes, cohort, nested):
+    """Normalise each density, then bound how they may stack up on each other.
+
+    A linear function over a segment takes its extremes at the ends, so testing
+    every stacking rule at the nodes tests it everywhere.
+    """
     segments = nodes - 1
-    cohort = model.cohort_size(sizes)
     weights = trapezoid_weights(nodes)
     out = [
         {"type": "eq",
-         "fun": lambda p: np.dot(p[:nodes], weights) - segments * sizes[ACADEMIC] / cohort},
-        {"type": "eq", "fun": lambda p: np.dot(p[nodes:], weights) - segments},
+         "fun": lambda p, i=i: np.dot(p[i * nodes:(i + 1) * nodes], weights) - segments}
+        for i in range(len(EXAMS))
     ]
-    if zero_tail:
-        out.append({"type": "eq", "fun": lambda p: p[-1]})
-    if monotone:
-        out.append({"type": "ineq", "fun": lambda p: np.diff(p[:nodes])})
+    covering = [(EXAMS.index(exam), sizes[exam]) for exam in COVER]
+    out.append({
+        "type": "ineq",
+        "fun": lambda p: sum(size * p[i * nodes:(i + 1) * nodes]
+                             for i, size in covering) - cohort,
+    })
     if nested:
         # 指考 is a second sitting for students who already took 學測, so it
         # cannot hold more people at an ability than 學測 does.
-        out.append({"type": "ineq",
-                    "fun": lambda p: cohort * p[:nodes] - sizes[RETAKE] * p[nodes:]})
+        academic, retake = EXAMS.index(ACADEMIC), EXAMS.index(RETAKE)
+        out.append({
+            "type": "ineq",
+            "fun": lambda p: (sizes[ACADEMIC] * p[academic * nodes:(academic + 1) * nodes]
+                              - sizes[RETAKE] * p[retake * nodes:(retake + 1) * nodes]),
+        })
     return out
 
 
-def _start(nodes, sizes, zero_tail):
-    """A flat share at the observed academic fraction, with a flat 指考."""
-    segments = nodes - 1
-    share = np.full(nodes, sizes[ACADEMIC] / model.cohort_size(sizes))
-    if zero_tail:
-        retake = np.full(nodes, segments / (segments - 0.5))
-        retake[-1] = 0.0
-    else:
-        retake = np.ones(nodes)
-    return np.concatenate([share, retake])
+def fit(observations, sizes, segments, overlap=0.0, nested=True, curvature=0.0):
+    """Fit densities that stack up into a possible population, and return (pool, MAE).
 
-
-def fit(observations, sizes, segments, zero_tail=False, monotone=False,
-        nested=False, curvature=0.0):
-    """Fit the cohort share and the 指考 density, and return (pool, MAE)."""
+    `overlap` is the share of the cohort sitting both 學測 and 統測. At zero the
+    floor and the taker counts leave no slack, so the two densities have to add
+    up to the cohort exactly; raising it buys the pair room to overlap.
+    """
     if not observations:
         raise ValueError("no matched departments to fit against")
     missing = set(EXAMS) - set(sizes)
     if missing:
         raise ValueError(f"missing observed taker counts: {sorted(missing)}")
     nodes = segments + 1
+    cohort = cohort_size(sizes, overlap)
     pairs = model.Pairs(observations, EXAMS, segments, sizes)
-    cap = model.cohort_size(sizes) / sizes[RETAKE]
 
     def cost(params):
-        share, retake = _pack(params, nodes)
-        gaps = pairs.gaps(ComplementPool(share, retake, sizes))
+        values = _values(params, nodes)
+        gaps = pairs.gaps(model.LinearAbilityPool(values, sizes))
         loss = float((pairs.weights * gaps * gaps).sum()) / pairs.weight_sum
         if curvature and segments > 1:
-            loss += curvature * float((np.diff(share, n=2) ** 2).sum()
-                                      + (np.diff(retake, n=2) ** 2).sum())
+            loss += curvature * sum(float((np.diff(v, n=2) ** 2).sum())
+                                    for v in values.values())
         return loss
 
     got = optimize.minimize(
         cost,
-        _start(nodes, sizes, zero_tail),
+        np.concatenate([np.full(nodes, 1.0) for _ in EXAMS]),
         method="SLSQP",
-        bounds=[(0.0, 1.0)] * nodes + [(0.0, cap)] * nodes,
-        constraints=_constraints(nodes, sizes, zero_tail, monotone, nested),
-        options={"maxiter": 400, "ftol": 1e-11},
+        bounds=[(0.0, cohort / sizes[exam]) for exam in EXAMS for _ in range(nodes)],
+        constraints=_constraints(nodes, sizes, cohort, nested),
+        options={"maxiter": 600, "ftol": 1e-11},
     )
     if not got.success:
         raise RuntimeError(f"complement fit failed: {got.message}")
-    pool = ComplementPool(*_pack(got.x, nodes), sizes)
-    pool.degrees = degrees(segments, zero_tail)
+    pool = model.LinearAbilityPool(_values(got.x, nodes), sizes)
+    pool.degrees = degrees(segments)
+    pool.cohort = cohort
     return pool, model.residual(pool, observations)
+
+
+def cover(pool):
+    """People in 學測 and 統測 together at each node, over the cohort."""
+    total = sum(pool.values[exam] * pool.sizes[exam] for exam in COVER)
+    return total / pool.cohort

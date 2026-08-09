@@ -23,15 +23,17 @@ from pool import complement, model
 # purely on 指考 — from 111 its formulas mix in 學測 subjects.
 YEAR = "110"
 
-# Held-out error picks these out in pool/compare.py. Four and five bends are a
-# coin flip against three, and 指考 sitting under 學測 never binds, so it costs
-# nothing to state.
+# Held-out error picks the bend count in pool/compare.py; four and five are a
+# coin flip against three. It keeps preferring more overlap than anyone believes,
+# and spends all of it at a single ability, so this is a judgement about how many
+# students sit both 學測 and 統測 rather than something the thresholds decide.
 BENDS = 3
+OVERLAP = 0.05
 
 
 def fit_pool(observations, sizes):
-    """Fit the chosen model: 學測 and 統測 split the cohort at every ability."""
-    return complement.fit(observations, sizes, BENDS, nested=True)
+    """Fit the chosen model: densities that stack into a possible population."""
+    return complement.fit(observations, sizes, BENDS, overlap=OVERLAP)
 
 
 EXAMS = {

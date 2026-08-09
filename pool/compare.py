@@ -32,29 +32,28 @@ def independent(segments, **hypotheses):
     return run
 
 
-def tied(segments, **hypotheses):
-    """Fit 學測's share of the cohort, so 統測 is whatever is left over."""
+def stacked(segments, **hypotheses):
+    """Fit densities that have to stack up into a population somebody could be."""
     def run(observations, exams, sizes):
         return complement.fit(observations, sizes, segments, **hypotheses)
     return run
 
 
-COVER = ("gsat", "tongce")
+COVER = complement.COVER
 
 CANDIDATES = (
     ("free densities, 2 bends, 指考 tail zero", independent(2, zero_tails=("zhikao",))),
-    ("free densities, 3 bends, 指考 tail zero", independent(3, zero_tails=("zhikao",))),
     ("free densities, 3 bends", independent(3)),
-    ("free densities, 3 bends, cohort covered on top", independent(3, top_floor=COVER)),
     ("free densities, 4 bends, cohort covered on top", independent(4, top_floor=COVER)),
-    ("tied to cohort, 1 bend", tied(1)),
-    ("tied to cohort, 2 bends", tied(2)),
-    ("tied to cohort, 3 bends", tied(3)),
-    ("tied to cohort, 4 bends", tied(4)),
-    ("tied to cohort, 5 bends", tied(5)),
-    ("tied to cohort, 3 bends, 指考 tail zero", tied(3, zero_tail=True)),
-    ("tied to cohort, 3 bends, share rises", tied(3, monotone=True)),
-    ("tied to cohort, 3 bends, 指考 under 學測", tied(3, nested=True)),
+    ("stacked, 3 bends, nobody sits both", stacked(3, overlap=0.0)),
+    ("stacked, 3 bends, 2% sit both", stacked(3, overlap=0.02)),
+    ("stacked, 3 bends, 5% sit both", stacked(3, overlap=0.05)),
+    ("stacked, 3 bends, 10% sit both", stacked(3, overlap=0.10)),
+    ("stacked, 3 bends, 20% sit both", stacked(3, overlap=0.20)),
+    ("stacked, 2 bends, 5% sit both", stacked(2, overlap=0.05)),
+    ("stacked, 4 bends, 5% sit both", stacked(4, overlap=0.05)),
+    ("stacked, 5 bends, 5% sit both", stacked(5, overlap=0.05)),
+    ("stacked, 3 bends, 5%, 指考 free of 學測", stacked(3, overlap=0.05, nested=False)),
 )
 
 

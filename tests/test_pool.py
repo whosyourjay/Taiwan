@@ -236,7 +236,7 @@ SIZES = {"gsat": 126_287.0, "tongce": 83_706.0, "zhikao": 38_053.0}
 
 
 class TestComplement(unittest.TestCase):
-    """學測 and 統測 partition the cohort, so their densities always fill it."""
+    """The fitted densities have to stack into a population somebody could be."""
 
     def observations(self):
         return [
@@ -246,61 +246,70 @@ class TestComplement(unittest.TestCase):
             ("gsat", 0.50, "tongce", 0.60, 4.0),
         ]
 
-    def test_random_shares_always_fill_the_cohort(self):
-        rng = np.random.default_rng(20260809)
-        cohort = pool.cohort_size(SIZES)
-        for _ in range(200):
-            nodes = int(rng.integers(2, 7))
-            share = rng.uniform(0.0, 1.0, nodes)
-            built = complement.ComplementPool(share, rng.uniform(0.1, 2, nodes), SIZES)
-            total = (built.values["gsat"] * SIZES["gsat"]
-                     + built.values["tongce"] * SIZES["tongce"])
-            np.testing.assert_allclose(total, cohort, rtol=1e-9)
+    def test_overlap_shrinks_the_cohort_below_the_taker_counts(self):
+        both = complement.cohort_size(SIZES, 0.0)
+        self.assertAlmostEqual(both, SIZES["gsat"] + SIZES["tongce"])
+        self.assertAlmostEqual(complement.cohort_size(SIZES, 0.25), both / 1.25)
+        with self.assertRaises(ValueError):
+            complement.cohort_size(SIZES, -0.1)
 
-    def test_recovers_a_planted_share(self):
-        # Thresholds generated from a known pool have to lead back to it. The
-        # planted share averages 0.6, which is exactly 學測's share of takers.
-        sizes = {"gsat": 120_000.0, "tongce": 80_000.0, "zhikao": 40_000.0}
-        planted = complement.ComplementPool([0.8, 0.4, 0.8, 0.4],
-                                            [0.2, 0.8, 1.6, 1.0], sizes)
-        observations = [
-            (left, top, right, matching_top(planted, left, top, right), 1.0)
-            for left, right in (("gsat", "tongce"), ("gsat", "zhikao"),
-                                ("tongce", "zhikao"))
-            for top in (0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95)
-        ]
-        fitted, mae = complement.fit(observations, sizes, 3)
-        self.assertLess(mae, 0.05)
-        np.testing.assert_allclose(fitted.share, planted.share, atol=0.01)
-        np.testing.assert_allclose(fitted.values["zhikao"],
-                                   planted.values["zhikao"], atol=0.01)
+    def test_no_overlap_leaves_the_pair_no_slack(self):
+        # The floor and the taker counts pin the sum exactly when nobody sits both.
+        fitted, _ = complement.fit(self.observations(), SIZES, 3, overlap=0.0)
+        np.testing.assert_allclose(complement.cover(fitted), 1.0, atol=1e-6)
 
-    def test_zero_tail_and_normalisations_hold(self):
-        fitted, _ = complement.fit(self.observations(), SIZES, 3, zero_tail=True)
-        self.assertAlmostEqual(fitted.values["zhikao"][-1], 0.0, places=7)
+    def test_overlap_is_the_only_slack_the_floor_leaves(self):
+        for overlap in (0.02, 0.05, 0.2):
+            fitted, _ = complement.fit(self.observations(), SIZES, 3,
+                                       overlap=overlap)
+            cover = complement.cover(fitted)
+            self.assertGreaterEqual(cover.min(), 1.0 - 1e-6, "the floor holds")
+            # Spent everywhere at once the slack would be exactly 1 + overlap.
+            self.assertLessEqual(float(np.mean(cover[[0, -1]])), 1.0 + overlap + 1e-6)
+
+    def test_no_exam_holds_more_people_than_the_cohort(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 4, overlap=0.1)
+        for exam in fitted.exams:
+            self.assertLessEqual(float((fitted.values[exam] * SIZES[exam]).max()),
+                                 fitted.cohort + 1e-6)
+
+    def test_normalisations_hold(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 3, overlap=0.05)
         for exam in fitted.exams:
             self.assertAlmostEqual(float(fitted.masses(exam).sum()), 1.0, places=7)
-
-    def test_monotone_share_never_falls(self):
-        fitted, _ = complement.fit(self.observations(), SIZES, 3, monotone=True)
-        self.assertTrue((np.diff(fitted.share) >= -1e-7).all())
 
     def test_nested_keeps_zhikao_under_gsat(self):
         fitted, _ = complement.fit(self.observations(), SIZES, 3, nested=True)
         self.assertTrue((fitted.values["zhikao"] * SIZES["zhikao"]
                          <= fitted.values["gsat"] * SIZES["gsat"] + 1e-6).all())
 
-    def test_share_stays_a_share(self):
-        fitted, _ = complement.fit(self.observations(), SIZES, 4)
-        self.assertTrue((fitted.share >= -1e-9).all())
-        self.assertTrue((fitted.share <= 1 + 1e-9).all())
+    def test_recovers_a_planted_population(self):
+        # Thresholds generated from a known pool have to lead back to it.
+        sizes = {"gsat": 120_000.0, "tongce": 80_000.0, "zhikao": 40_000.0}
+        planted = pool.LinearAbilityPool(
+            {"gsat": [4 / 3, 2 / 3, 4 / 3, 2 / 3],
+             "tongce": [0.5, 1.5, 0.5, 1.5],
+             "zhikao": [0.2, 0.8, 1.6, 1.0]},
+            sizes,
+        )
+        observations = [
+            (left, top, right, matching_top(planted, left, top, right), 1.0)
+            for left, right in (("gsat", "tongce"), ("gsat", "zhikao"),
+                                ("tongce", "zhikao"))
+            for top in (0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95)
+        ]
+        fitted, mae = complement.fit(observations, sizes, 3, overlap=0.05,
+                                     nested=False)
+        self.assertLess(mae, 0.5)
+        for exam in fitted.exams:
+            np.testing.assert_allclose(fitted.values[exam], planted.values[exam],
+                                       atol=0.05)
 
-    def test_degrees_drop_the_two_normalisations_and_any_zero_tail(self):
-        self.assertEqual(complement.degrees(3, False), 6)
-        self.assertEqual(complement.degrees(3, True), 5)
-        self.assertEqual(complement.degrees(1, False), 2)
+    def test_degrees_drop_one_normalisation_per_exam(self):
+        self.assertEqual(complement.degrees(3), 9)
+        self.assertEqual(complement.degrees(1), 3)
         with self.assertRaises(ValueError):
-            complement.degrees(0, False)
+            complement.degrees(0)
 
     def test_rejects_missing_taker_counts(self):
         with self.assertRaisesRegex(ValueError, "missing observed taker counts"):
