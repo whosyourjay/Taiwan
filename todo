@@ -1,3 +1,6 @@
+Total population of students in a year (Taiwan annual birth data)
+學測 for all other years
+
 Fix art ranking. E.g. rank schools on individual exams somehow, or rank by groups that share the same set of exams.
 
 - This should be handled year-by-year. We should build an estimate of student percentile across the 2-4 test types we're using, then assign a final percentile to the admit track. Then when we pool across years, tracks, or departments we take a weighted average.
@@ -50,3 +53,21 @@ How to fit tests
   Test outcomes are percentiles in the test taker pool. All we want is to convert these to percentiles in the original pool. There is no need for any other fancy distortion or correlation.
 
 I determined that 2 steps = 3 parameters, 2 lines = 5 parameters, 3 steps = 5 parameters, etc. If it's not too expensive we could fit more steps/lines or even higher order polynomials. But we should probably require the curves to me unimodal. And using too many parameters leads to overfitting so 3 steps is  fine for now.
+
+There are 400-600 senior high schools. Is it realistic for us to get the matrix of which high schools are sending students to which universities? Or perhaps get this data for just a few top high schools or top universities?
+
+
+Consider the following model: all measurements have some underlying correlation matrix. E.g. ranks in class, xuece, tongce, and zhikao. Simultaneous thresholds on rank + xuece gives us a distribution over underlying ability. Xuece (low) + zhikao (high) give us another. One threshold on xuece, or tongce give a different distribution. The school will likely try to make the median or mean match.
+
+  - 學測個申: 65,453 passed stage 1; 44,025 were finally allocated — about 67%.
+  - 統測甄選: 36,800 passed stage 1; 27,839 received at least one 正/備取 qualification — about 76%; 24,421 were finally allocated — about 66%.
+
+The apparent contradiction is that a department normally screens about 3× its quota, while each student applies to several departments. A candidate can pass some screens even if they fail others.
+
+24 matched 第八類 department-years.
+  - 562 students passed the published screen.
+  - Those represent 314 final seats: a 1.79× screen.
+
+The interviews for 統測 and 學測 are somewhere between 1.5x and 3x filters. Although a student might still end up at the school they want, they might get pushed to a worse department. I don't have a good way to handle this.
+
+Sounds great in theory but is it realistic to implement? Will the runtime be reasonable? Will it converge? Do we have enough datapoints to avoid overfitting?
