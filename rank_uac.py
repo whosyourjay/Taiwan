@@ -17,10 +17,11 @@ is needed. A least-squares fit over those matched departments maps 統測 scores
 onto the 分發入學 axis. The two partially collected 學測 paths are then mapped
 onto that fixed admitted-seat axis.
 
-Scores average all available years (108-114) within each admission path, then
-average paths by their annual admitted seats. This prevents a path with seven
-years of source data from outweighing one with two years merely due to coverage.
-Entities that have closed or merged are kept and marked `active=0`.
+Scores average all available rank evidence (108-114) within each admission path,
+then average paths by their annual admitted seats. Official national totals put
+unprocessed and rejected seats in the percentile denominator without assigning
+them to an entity. Entities that have closed or merged are kept and marked
+`active=0`.
 """
 
 import collections
@@ -34,9 +35,16 @@ import tsvio
 HERE = os.path.dirname(__file__)
 LATEST = "114"
 SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
+ADMISSION_TOTALS = "admission-totals.tsv"
 # The 學測 routes into 一般大學, each its own exam field. `system` stays the kind
 # of institution; `path` is how the seat was won.
 EXTRA = {"star": "star-cutoffs.tsv", "apply": "apply-cutoffs.tsv"}
+# Paths whose `basis` is already a share of a national cohort. Re-ranking these
+# against the collected rows would replace an absolute number with a position
+# inside whatever sample we happen to hold.
+ABSOLUTE = {"apply", "star"}
+# A 篩選 bar this much of the cohort clears did not screen anyone out.
+NON_BINDING = 0.95
 
 
 def identify_department(row):
@@ -84,15 +92,20 @@ def load_star():
         identify_department(row)
         row["seats"] = admitted
         row["norm"] = -float(row["gpa"])
-        row["basis"] = row["norm"]
+        # A within-school percentile is already absolute, so it skips curving.
+        row["basis"] = 100.0 - float(row["gpa"])
         yield row
 
 
-def load_apply():
-    """個人申請 rows, dropping the ones OCR could not be trusted on.
+def load_apply(cohort):
+    """個人申請 rows, scored as a share of the national 學測 cohort.
 
     A `norm` above 1 is impossible and means a subject was lost from a composite
     label, and a blank 校系名稱 cannot be joined to a department.
+
+    `basis` reads the published 篩選 bar against the 學測 級分 distribution: the
+    share of everyone who sat the exam who cleared it. A bar almost nobody fails
+    says only that this 篩選順序 was not what bound, so those rows are dropped.
     """
     for row in tsvio.read_rows(os.path.join(HERE, EXTRA["apply"])):
         if not row["norm"] or not row["dept"].strip():
@@ -101,13 +114,27 @@ def load_apply():
         admitted = int(row["admitted"] or 0)
         if norm > 1 or not admitted:
             continue
+        top = cohort.top_fraction(row["year"], row["cut_label"], row["cut_level"])
+        if top is None or top >= NON_BINDING:
+            continue
         row["system"], row["path"] = "uac", "apply"
         row["school"] = row["college"]
         identify_department(row)
         row["seats"] = admitted
         row["norm"] = norm
-        row["basis"] = row["norm"]
+        row["basis"] = 100.0 * (1.0 - top)
         yield row
+
+
+def load_admission_totals():
+    """Official admitted seats by year and path, including unparsed schools."""
+    totals = {}
+    for row in tsvio.read_rows(os.path.join(HERE, ADMISSION_TOTALS)):
+        key = (row["year"], row["path"])
+        if key in totals:
+            raise ValueError(f"duplicate admission total for {key}")
+        totals[key] = int(row["admitted"])
+    return totals
 
 
 def joinable(rows, known):
@@ -134,22 +161,60 @@ def wmean(rows, field):
     return sum(r[field] * r["seats"] for r in rows) / seats if seats else 0.0
 
 
-def curve(rows, source, target, key):
+def curve(rows, source, target, key, floor_seats=None):
     """Set `target` to where `source` falls among the seats it competes with, 0-100.
 
     Keying on year and admission path curves each route against its own field,
     which makes the bridge fit on comparable scales. Keying on year alone
     curves the merged pool once both systems are on one axis. Rows sharing a
-    value share the midpoint of the seats they span.
+    value share the midpoint of the seats they span. Optional `floor_seats`
+    count in each group's denominator and below every ranked row, but are never
+    assigned a score themselves.
     """
+    floor_seats = floor_seats or {}
     groups = collections.defaultdict(list)
     for row in rows:
         groups[key(row)].append(row)
-    for group in groups.values():
+    for group_key, group in groups.items():
         values, percentiles = ceec_score.weighted_midpoints(group, source)
         percentile_of = dict(zip(values, percentiles))
+        ranked = sum(row["seats"] for row in group)
+        floor = floor_seats.get(group_key, 0)
+        if floor < 0:
+            raise ValueError(f"negative floor seats for {group_key}: {floor}")
+        total = ranked + floor
         for row in group:
-            row[target] = 100.0 * percentile_of[row[source]]
+            row[target] = 100.0 * (
+                floor + ranked * percentile_of[row[source]]
+            ) / total
+
+
+def anonymous_seats(rows, totals):
+    """Return unranked official seats by year and by (year, path).
+
+    Only rows that survive parsing and joining are `observed`. Thus a rejected
+    row automatically remains represented in the national denominator without
+    supplying evidence about any school or department's rank.
+    """
+    observed = collections.Counter()
+    for row in rows:
+        observed[(row["year"], row["path"])] += row["seats"]
+    uncovered = set(observed) - set(totals)
+    if uncovered:
+        raise ValueError(f"missing official admission totals for {sorted(uncovered)}")
+
+    residual = {}
+    by_year = collections.Counter()
+    for key, admitted in totals.items():
+        missing = admitted - observed[key]
+        if missing < 0:
+            raise ValueError(
+                f"ranked seats exceed official total for {key}: "
+                f"{observed[key]} > {admitted}"
+            )
+        residual[key] = missing
+        by_year[key[0]] += missing
+    return dict(by_year), residual
 
 
 def by_dept(rows, field="pct"):
@@ -271,10 +336,15 @@ def write(path, header, ranked, counts):
     print(f"{len(ranked):>5} rows -> {os.path.basename(path)}  ({matched} with gender)")
 
 
-def main():
-    distributions = ceec_score.ScoreDistributions.load(
-        os.path.join(HERE, "ceec-scores.tsv")
-    )
+def build_rows():
+    """Run the pipeline and return every row carrying its final `score`.
+
+    Split out from main() so a diagnostic can read the per-path scores that the
+    rankings then average away.
+    """
+    scores = os.path.join(HERE, "ceec-scores.tsv")
+    distributions = ceec_score.ScoreDistributions.load(scores)
+    cohort = ceec_score.CohortPercentiles.load(scores)
     uac_rows = list(load("uac", distributions))
     tech_rows = list(load("tech"))
     adjusted = sum("ceec_percentile" in row for row in uac_rows)
@@ -286,7 +356,7 @@ def main():
     unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     extra = {}
-    for path, loader in (("star", load_star), ("apply", load_apply)):
+    for path, loader in (("star", load_star), ("apply", lambda: load_apply(cohort))):
         got = list(loader())
         kept = joinable(got, known)
         extra[path] = kept
@@ -298,7 +368,14 @@ def main():
     # CEEC improves repeatability inside UAC, but using it as the bridge target
     # raises leave-one-school-out error from 11.60 to 12.63 points.
     curve(rows, "norm", "bridge_pct", lambda r: (r["year"], r["path"]))
-    curve(rows, "basis", "pct", lambda r: (r["year"], r["path"]))
+    # Curving turns a value into a position among the seats collected alongside
+    # it, which is what the incompletely collected paths must not have done to
+    # them. Their basis is already national, so it carries straight through.
+    curve([r for r in rows if r["path"] not in ABSOLUTE], "basis", "pct",
+          lambda r: (r["year"], r["path"]))
+    for row in rows:
+        if row["path"] in ABSOLUTE:
+            row["pct"] = row["basis"]
 
     for row in uac_rows:
         row["merged"] = row["pct"]
@@ -316,22 +393,49 @@ def main():
     for row in tech_rows:
         row["merged"] = intercept + slope * row["pct"]
 
-    # The established 分發+統測 cohort defines the published percentile. The
-    # extra paths cover only eight schools in two years, so including their seats
-    # in this curve would redefine every existing score because collection is
-    # partial. Match each extra path directly onto the fixed score axis instead.
-    curve(uac_rows + tech_rows, "merged", "score", lambda r: r["year"])
-    uac_score = by_dept(uac_rows, "score")
+    # First make a provisional admitted-seat axis from the two fully collected
+    # cutoff routes. The partial paths can then be located on it without their
+    # incomplete coverage redefining the bridge fit.
+    curve(uac_rows + tech_rows, "merged", "rank_basis", lambda r: r["year"])
+    uac_score = by_dept(uac_rows, "rank_basis")
     for path, path_rows in extra.items():
         intercept, slope, stats = fit_bridge(uac_score, by_dept(path_rows))
         print(
-            f"bridge: score = {intercept:.3f} + {slope:.4f} * {path}"
+            f"bridge: rank = {intercept:.3f} + {slope:.4f} * {path}"
             f"   R2={stats['r2']:.3f}  n={stats['n']} dept-years"
             f"  ({stats['depts']} depts, {stats['schools']} schools,"
             f" {path} {stats['lo']:.1f}-{stats['hi']:.1f})"
         )
         for row in path_rows:
-            row["score"] = intercept + slope * row["pct"]
+            row["rank_basis"] = intercept + slope * row["pct"]
+
+    # National totals preserve every admitted student in the percentile cohort.
+    # A route with no rank data, an uncollected school, or a rejected OCR/join
+    # row contributes anonymous seats below the top-tail evidence only. It never
+    # creates an entity row or contributes to an entity's path average.
+    floors, residual = anonymous_seats(rows, load_admission_totals())
+    curve(rows, "rank_basis", "score", lambda r: r["year"], floors)
+    by_path = collections.Counter()
+    for (_, path), missing in residual.items():
+        by_path[path] += missing
+    print(
+        "anonymous seats: "
+        + ", ".join(f"{year}={floors[year]:,}" for year in sorted(floors))
+    )
+    print(
+        "anonymous by path: "
+        + ", ".join(
+            f"{path}={by_path[path]:,}"
+            for path in ("uac", "tech", "star", "apply", "tech_select")
+        )
+    )
+    return rows
+
+
+def main():
+    rows = build_rows()
+    uac_rows = [r for r in rows if r["path"] == "uac"]
+    tech_rows = [r for r in rows if r["path"] == "tech"]
     tail = ["score", "years", "last_year", "active", "seats_avg", "system"]
     tail += ["men", "women", "pct_women"]
     by_dept_counts = gender.load()
