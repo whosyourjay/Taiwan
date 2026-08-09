@@ -136,22 +136,24 @@ def report(pool_fit, sizes, observations, error):
         print("  " + f"top {100 * top:>4.0f}% of takers".ljust(20) + cells)
 
 
-def main():
+def observations():
+    """Run the pipeline and pair up departments admitting through two exams."""
     with contextlib.redirect_stdout(sys.stderr):
         rows = rank_uac.build_rows()
     resolved = attach_apply_tops(rows)
+    matched = pool.matched(rows, exam_of, top_of)
+    print(f"{resolved} 個人申請 bars read against the 學測 cohort", file=sys.stderr)
+    return rows, matched
 
-    observations = pool.matched(rows, exam_of, top_of)
-    if not observations:
+
+def main():
+    _, matched = observations()
+    if not matched:
         print("no matched departments; nothing to fit", file=sys.stderr)
         return
-    print(f"{resolved} 個人申請 bars read against the 學測 cohort", file=sys.stderr)
-
-    sizes = taker_counts()
-    fitted, error = pool.fit(observations, sorted({e for o in observations
-                                                   for e in (o[0], o[2])}),
-                             bins=BINS)
-    report(fitted, sizes, observations, error)
+    exams = sorted({e for o in matched for e in (o[0], o[2])})
+    fitted, error = pool.fit(matched, exams, bins=BINS)
+    report(fitted, taker_counts(), matched, error)
 
 
 def taker_counts():

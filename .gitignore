@@ -10,8 +10,12 @@ tech/
 
 # Built by parse_*.py and rank_uac.py.
 *.tsv
+!admission-totals.tsv
 
 __pycache__/
 *.pyc
 .DS_Store
 *.swp
+
+# Built by plot_pool.py.
+pool-densities.png
