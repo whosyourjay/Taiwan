@@ -18,6 +18,7 @@ or per row, because nothing in the image can be read as the wrong kind of thing.
 """
 
 import csv
+import difflib
 import glob
 import io
 import os
@@ -284,11 +285,15 @@ def snap(ocr, candidates):
     """
     if not ocr or not candidates:
         return ocr
+    text = "".join(char for char in ocr if "\u4e00" <= char <= "\u9fff")
+    if not text:
+        return ocr
     best, score = ocr, 0.0
     for c in candidates:
-        if len(c) < len(ocr) - 2 or len(c) > len(ocr) + 2:
+        candidate = "".join(char for char in c if "\u4e00" <= char <= "\u9fff")
+        if abs(len(candidate) - len(text)) > 2:
             continue
-        hit = sum(1 for x, y in zip(ocr, c) if x == y) / max(len(ocr), len(c))
+        hit = difflib.SequenceMatcher(None, text, candidate).ratio()
         if hit > score:
             best, score = c, hit
     return best if score >= 0.6 else ocr
