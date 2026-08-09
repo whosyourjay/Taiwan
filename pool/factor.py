@@ -33,7 +33,10 @@ from pool import complement, model
 RANK = "rank"
 LOADED = ("gsat", "tongce", "zhikao", RANK)
 # Wide enough to hold any bar a normal score can reach, fine enough to invert.
-BARS = np.linspace(-5.0, 5.0, 801)
+BARS = np.linspace(-5.0, 5.0, 401)
+# A sharp measurement turns its tail into a step, which even spacing in the
+# cohort percentile resolves and normal-node spacing does not.
+CELLS = 1024
 CEILING = 0.999
 
 
@@ -69,18 +72,22 @@ class Gates:
     def __init__(self, per_row):
         self.counts = np.array([len(row) for row in per_row], dtype=int)
         self.flat = np.array([top for row in per_row for top in row], dtype=float)
+        self.rows = np.repeat(np.arange(len(self.counts)), self.counts)
         starts = np.concatenate([[0], np.cumsum(self.counts)[:-1]])
         self.starts = np.clip(starts, 0, max(len(self.flat) - 1, 0))
 
-    def factor(self, pool, exam):
-        """Chance a student at each ability node clears every gate in the row."""
-        shape = (len(self.counts), len(pool.ability))
+    def factor(self, pool, exam, ability):
+        """Chance a student at each ability node clears every gate in its row.
+
+        `ability` holds one row of nodes per bar, so each gate is tested against
+        the nodes belonging to the bar that set it.
+        """
         if not len(self.flat):
-            return np.ones(shape)
+            return np.ones(ability.shape)
         bars = pool.threshold(exam, self.flat)
         loading, spread = pool.pair(exam)
-        z = (bars[:, None] - loading * pool.ability) / spread
-        logs = np.log(np.clip(survival(z), 1e-12, None))
+        z = (bars[:, None] - loading * ability[self.rows]) / spread
+        logs = np.log(np.clip(survival(z), 1e-300, None))
         summed = np.add.reduceat(logs, self.starts, axis=0)
         summed[self.counts == 0] = 0.0
         return np.exp(summed)
@@ -94,21 +101,25 @@ class FactorPool:
     measurement's correlation with ability.
     """
 
-    def __init__(self, pool, loadings, nodes=96):
+    def __init__(self, pool, loadings, nodes=96, cells=CELLS):
         self.pool = pool
         self.loadings = {k: min(float(v), CEILING) for k, v in loadings.items()}
         self.exams = pool.exams
         self.sizes = pool.sizes
         self.bins = pool.bins
         self.ability, self.weight = quadrature(nodes)
-        self.takers = {exam: self._takers(exam) for exam in self.exams}
+        self.cell = special.ndtri((np.arange(cells) + 0.5) / cells)
+        self.takers = {exam: self._takers(exam, cells) for exam in self.exams}
         self._tails = {}
 
-    def _takers(self, exam):
-        """Probability weights over ability among one exam's takers."""
+    def density(self, exam, ability):
+        """How thickly an exam draws its takers at each ability."""
         breaks = np.linspace(0.0, 1.0, self.bins + 1)
-        density = np.interp(special.ndtr(self.ability), breaks, self.pool.values[exam])
-        weights = self.weight * density
+        return np.interp(special.ndtr(ability), breaks, self.pool.values[exam])
+
+    def _takers(self, exam, cells):
+        """Probability weights over even slices of the cohort, for one exam."""
+        weights = self.density(exam, self.cell) / cells
         return weights / weights.sum()
 
     def pair(self, measure):
@@ -119,16 +130,34 @@ class FactorPool:
     def tail(self, exam, bars, measure=None):
         """Share of an exam's takers scoring above each bar."""
         loading, spread = self.pair(measure or exam)
-        z = (np.asarray(bars, dtype=float)[:, None] - loading * self.ability) / spread
+        z = (np.asarray(bars, dtype=float)[:, None] - loading * self.cell) / spread
         return survival(z) @ self.takers[exam]
 
     def threshold(self, exam, tops, measure=None):
-        """The bar whose upper tail holds each given share of the takers."""
+        """The bar whose upper tail holds each given share of the takers.
+
+        Interpolating the tail on a probit scale rather than a linear one is
+        what keeps a coarse grid honest: a tail is close to normal, so on that
+        scale the curve being inverted is nearly a straight line.
+        """
         key = (exam, measure)
         if key not in self._tails:
-            self._tails[key] = self.tail(exam, BARS, measure)
-        got = self._tails[key]
-        return np.interp(np.asarray(tops, dtype=float), got[::-1], BARS[::-1])
+            got = np.clip(self.tail(exam, BARS, measure), 1e-12, 1 - 1e-12)
+            self._tails[key] = special.ndtri(got)
+        probit = self._tails[key]
+        want = special.ndtri(np.clip(np.asarray(tops, dtype=float), 1e-12, 1 - 1e-12))
+        return np.interp(want, probit[::-1], BARS[::-1])
+
+    def posterior(self, bars, measure):
+        """Ability nodes for a student sitting exactly at each bar.
+
+        Before participation is counted, ability given a bar is normal about
+        `λ m` with the noise the loading leaves. Centring the quadrature there
+        keeps every node where the answer lives, however sharp the measurement
+        gets, and the taker density then reweights those nodes.
+        """
+        loading, spread = self.pair(measure)
+        return loading * np.asarray(bars, dtype=float)[:, None] + spread * self.ability
 
     def implied(self, exam, bars, measure=None, gates=None):
         """Cohort percentile of the expected ability of a student at the bar.
@@ -137,13 +166,12 @@ class FactorPool:
         moves the answer for a fixed bar, and only the correlation says by how
         much.
         """
-        loading, spread = self.pair(measure or exam)
-        z = (np.asarray(bars, dtype=float)[:, None] - loading * self.ability) / spread
-        weights = self.takers[exam] * np.exp(-0.5 * z * z)
+        ability = self.posterior(bars, measure or exam)
+        weights = self.weight * self.density(exam, ability)
         if gates is not None:
-            weights = weights * gates
+            weights = weights * gates.factor(self, exam, ability)
         total = weights.sum(axis=1)
-        mean = np.divide((weights * self.ability).sum(axis=1), total,
+        mean = np.divide((weights * ability).sum(axis=1), total,
                          out=np.zeros_like(total), where=total > 0)
         return special.ndtr(mean)
 
@@ -160,53 +188,57 @@ class FactorPool:
         return self.implied_top(exam, top_fractions)
 
 
+class Side:
+    """One side of every pair, split into the groups that read alike."""
+
+    def __init__(self, bars, exams):
+        self.size = len(bars)
+        self.top = np.array([0.0 if bar.top is None else bar.top for bar in bars])
+        self.score = np.array([bar.score or 0.0 for bar in bars], dtype=float)
+        self.groups = []
+        for exam in exams:
+            here = np.array([bar.exam == exam for bar in bars])
+            plain = np.flatnonzero(here & [bar.top is not None for bar in bars])
+            ranked = np.flatnonzero(here & [bar.top is None for bar in bars])
+            gates = Gates([bars[i].gates for i in ranked])
+            self.groups.append((exam, plain, ranked, gates))
+
+    def abilities(self, pool):
+        """Where every bar on this side lands on the cohort."""
+        out = np.empty(self.size)
+        for exam, plain, ranked, gates in self.groups:
+            if len(plain):
+                out[plain] = pool.implied_top(exam, self.top[plain])
+            if len(ranked):
+                out[ranked] = pool.implied_rank(exam, self.score[ranked], gates)
+        return out
+
+
 class Bars:
     """Bar pairs packed so one cost evaluation is a handful of vector ops."""
 
     def __init__(self, observations, exams):
-        index = {exam: i for i, exam in enumerate(exams)}
         self.exams = list(exams)
-        self.side = []
-        for which in (0, 1):
-            bars = [row[which] for row in observations]
-            self.side.append({
-                "exam": np.array([index[bar.exam] for bar in bars]),
-                "top": np.array([bar.top or 0.0 for bar in bars], dtype=float),
-                "score": np.array([bar.score or 0.0 for bar in bars], dtype=float),
-                "ranked": np.array([bar.top is None for bar in bars]),
-                "gates": Gates([bar.gates for bar in bars]),
-            })
+        self.side = [Side([row[which] for row in observations], self.exams)
+                     for which in (0, 1)]
         self.weights = np.array([row[2] for row in observations], dtype=float)
         self.weight_sum = float(self.weights.sum())
 
-    def side_abilities(self, pool, side):
-        """Where every bar on one side of the pairs lands on the cohort."""
-        out = np.empty(len(side["top"]))
-        gates = None
-        for i, exam in enumerate(self.exams):
-            plain = (side["exam"] == i) & ~side["ranked"]
-            if plain.any():
-                out[plain] = pool.implied_top(exam, side["top"][plain])
-            ranked = (side["exam"] == i) & side["ranked"]
-            if ranked.any():
-                if gates is None:
-                    gates = side["gates"].factor(pool, exam)
-                out[ranked] = pool.implied_rank(exam, side["score"][ranked],
-                                                gates[ranked])
-        return out
+    def levels(self, pool):
+        """Where each pair's two bars land, as a (left, right) pair of arrays."""
+        return self.side[0].abilities(pool), self.side[1].abilities(pool)
 
     def gaps(self, pool):
         """Disagreement between the two bars of every pair."""
-        left, right = (self.side_abilities(pool, side) for side in self.side)
-        self.levels = np.concatenate([left, right])
+        left, right = self.levels(pool)
         return left - right
 
-    def scatter(self, pool):
+    def scatter(self, left, right):
         """Weighted variance of every implied level the model produced."""
-        self.gaps(pool)
+        levels = np.concatenate([left, right])
         weights = np.concatenate([self.weights, self.weights])
-        mean = float((weights * self.levels).sum()) / weights.sum()
-        spread = self.levels - mean
+        mean = float((weights * levels).sum()) / weights.sum()
+        spread = levels - mean
         return float((weights * spread * spread).sum()) / weights.sum()
 
 
@@ -219,19 +251,17 @@ def disagreement(pool, observations, exams):
     return 100.0 * float((packed.weights * gaps).sum()) / packed.weight_sum
 
 
-def _cost(packed):
+def cost(packed, pool):
     """Squared disagreement as a share of the level variance it left standing.
 
     Shrinking every loading at once pulls each implied level toward the middle,
     which cuts the raw gaps without explaining a thing. Dividing by the spread
     of the levels removes that escape and asks the fit for agreement it earned.
     """
-    def evaluate(pool):
-        gaps = packed.gaps(pool)
-        error = float((packed.weights * gaps * gaps).sum()) / packed.weight_sum
-        return error / max(packed.scatter(pool), 1e-9)
-
-    return evaluate
+    left, right = packed.levels(pool)
+    gaps = left - right
+    error = float((packed.weights * gaps * gaps).sum()) / packed.weight_sum
+    return error / max(packed.scatter(left, right), 1e-9)
 
 
 def build(params, count, sizes, loadings, nodes):
@@ -242,8 +272,13 @@ def build(params, count, sizes, loadings, nodes):
 
 
 def fit(observations, sizes, segments, loadings=LOADED, nodes=96, floor=0.2,
-        overlap=0.0, nested=True):
-    """Fit the participation densities and every loading together."""
+        overlap=0.0, nested=True, steps=60):
+    """Fit the participation densities and every loading together.
+
+    SLSQP differences the cost numerically, so a step costs one evaluation per
+    parameter plus one. At full size that is under a second, and `steps` caps
+    the whole fit near a minute. `pool.converged` says whether it needed the cap.
+    """
     if not observations:
         raise ValueError("no matched departments to fit against")
     missing = set(complement.EXAMS) - set(sizes)
@@ -251,19 +286,18 @@ def fit(observations, sizes, segments, loadings=LOADED, nodes=96, floor=0.2,
         raise ValueError(f"missing observed taker counts: {sorted(missing)}")
     exams = sorted(sizes)
     packed = Bars(observations, exams)
-    cost = _cost(packed)
     count = segments + 1
     cohort = complement.cohort_size(sizes, overlap)
     guess = np.concatenate([complement.start(count), np.full(len(loadings), 0.9)])
 
     got = optimize.minimize(
-        lambda p: cost(build(p, count, sizes, loadings, nodes)),
+        lambda p: cost(packed, build(p, count, sizes, loadings, nodes)),
         guess,
         method="SLSQP",
         bounds=complement.bounds(count, cohort, sizes)
         + [(floor, CEILING)] * len(loadings),
         constraints=complement.constraints(count, sizes, cohort, nested),
-        options={"maxiter": 300, "ftol": 1e-10},
+        options={"maxiter": steps, "ftol": 1e-10},
     )
     pool = build(got.x, count, sizes, loadings, nodes)
     pool.cohort = cohort
