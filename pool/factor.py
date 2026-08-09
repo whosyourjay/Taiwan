@@ -234,42 +234,88 @@ def _cost(packed):
     return evaluate
 
 
-def _unpack(params, nodes, loadings):
-    """Split the optimiser vector into densities and one loading per measure."""
-    share, retake = complement.pack(params, nodes)
-    return share, retake, dict(zip(loadings, params[2 * nodes:]))
+def build(params, count, sizes, loadings, nodes):
+    """Read one optimiser vector as densities wrapped in their loadings."""
+    found = dict(zip(loadings, params[len(complement.EXAMS) * count:]))
+    pool = model.LinearAbilityPool(complement.values(params, count), sizes)
+    return FactorPool(pool, found, nodes)
 
 
 def fit(observations, sizes, segments, loadings=LOADED, nodes=96, floor=0.2,
-        **hypotheses):
+        overlap=0.0, nested=True):
     """Fit the participation densities and every loading together."""
     if not observations:
         raise ValueError("no matched departments to fit against")
+    missing = set(complement.EXAMS) - set(sizes)
+    if missing:
+        raise ValueError(f"missing observed taker counts: {sorted(missing)}")
     exams = sorted(sizes)
     packed = Bars(observations, exams)
     cost = _cost(packed)
     count = segments + 1
-    start = np.concatenate([
-        complement.start(count, sizes, hypotheses.get("zero_tail", False)),
-        np.full(len(loadings), 0.9),
-    ])
-    bounds = ([(0.0, 1.0)] * count
-              + [(0.0, model.cohort_size(sizes) / sizes[complement.RETAKE])] * count
-              + [(floor, CEILING)] * len(loadings))
-
-    def objective(params):
-        share, retake, found = _unpack(params, count, loadings)
-        return cost(FactorPool(complement.ComplementPool(share, retake, sizes),
-                               found, nodes))
+    cohort = complement.cohort_size(sizes, overlap)
+    guess = np.concatenate([complement.start(count), np.full(len(loadings), 0.9)])
 
     got = optimize.minimize(
-        objective, start, method="SLSQP", bounds=bounds,
-        constraints=complement.constraints(count, sizes, **hypotheses),
-        options={"maxiter": 200, "ftol": 1e-9},
+        lambda p: cost(build(p, count, sizes, loadings, nodes)),
+        guess,
+        method="SLSQP",
+        bounds=complement.bounds(count, cohort, sizes)
+        + [(floor, CEILING)] * len(loadings),
+        constraints=complement.constraints(count, sizes, cohort, nested),
+        options={"maxiter": 300, "ftol": 1e-10},
     )
-    share, retake, found = _unpack(got.x, count, loadings)
-    pool = FactorPool(complement.ComplementPool(share, retake, sizes), found, nodes)
-    pool.degrees = complement.degrees(segments, hypotheses.get("zero_tail", False))
-    pool.degrees += len(loadings)
-    pool.converged = got.success
+    pool = build(got.x, count, sizes, loadings, nodes)
+    pool.cohort = cohort
+    pool.degrees = complement.degrees(segments) + len(loadings)
+    pool.converged = bool(got.success)
     return pool, disagreement(pool, observations, exams)
+
+
+def load(year=None):
+    """Every bar the fit compares, paired inside its department."""
+    import ceec_score
+    from lib.paths import path
+    from pool import bars, fit as pool_fit
+
+    rows, _, _ = pool_fit.source_rows()
+    pool_fit.attach_apply_tops(rows)
+    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
+    groups = bars.observations(rows, pool_fit.exam_of, pool_fit.top_of, cohort)
+    return groups, pool_fit.taker_counts()
+
+
+def report(pool, observations, error):
+    """Print the loadings and where a bar on each measurement now lands."""
+    from pool import bars
+
+    print(f"\nfit on {len(observations)} bar pairs")
+    print("  " + ", ".join(f"{left}-{right}: {count}" for (left, right), count
+                           in sorted(bars.counts(observations).items())))
+    print(f"  disagreement: {error:.2f} cohort percentile points")
+    print(f"  converged: {pool.converged}, {pool.degrees} parameters")
+
+    print("\nhow sharply each measurement reads ability")
+    for measure in sorted(pool.loadings):
+        loading = pool.loadings[measure]
+        print(f"  {measure:<8}λ = {loading:.3f}   ability explained {loading ** 2:.1%}")
+
+    print("\nwhere the top of each exam's takers lands on the cohort")
+    exams = pool.exams
+    print("  " + f"{'top of takers':<20}" + "".join(f"{e:>12}" for e in exams))
+    for top in (0.01, 0.05, 0.10, 0.25, 0.50):
+        cells = "".join(f"{100 * pool.implied_top(e, [top])[0]:>11.1f}%" for e in exams)
+        print("  " + f"top {100 * top:>4.0f}% of takers".ljust(20) + cells)
+
+
+def main():
+    from pool import bars, fit as pool_fit
+
+    groups, sizes = load()
+    observations = bars.flatten(groups)
+    pool, error = fit(observations, sizes, pool_fit.BENDS)
+    report(pool, observations, error)
+
+
+if __name__ == "__main__":
+    main()

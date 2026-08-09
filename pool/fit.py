@@ -151,8 +151,9 @@ def source_rows():
     rank_uac.unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     apply_rows = rank_uac.joinable(list(rank_uac.load_apply(cohort)), known)
+    star_rows = rank_uac.joinable(list(rank_uac.load_star()), known)
     tech_apply = load_tech_apply(distributions)
-    rows = uac_rows + tech_rows + apply_rows + tech_apply
+    rows = uac_rows + tech_rows + apply_rows + star_rows + tech_apply
     rank_uac.unify_spelling(rows)
     return rows, len(apply_rows), len(tech_apply)
 

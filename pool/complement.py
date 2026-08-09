@@ -53,13 +53,27 @@ def trapezoid_weights(nodes):
     return weights
 
 
-def _values(params, nodes):
-    """Split the optimiser vector into each exam's spline ordinates."""
+def values(params, nodes):
+    """Split the optimiser vector into each exam's spline ordinates.
+
+    Only the leading ordinates are read, so a caller may carry its own
+    parameters after them.
+    """
     return {exam: params[i * nodes:(i + 1) * nodes]
             for i, exam in enumerate(EXAMS)}
 
 
-def _constraints(nodes, sizes, cohort, nested):
+def bounds(nodes, cohort, sizes):
+    """Hold every ordinate between empty and the whole cohort."""
+    return [(0.0, cohort / sizes[exam]) for exam in EXAMS for _ in range(nodes)]
+
+
+def start(nodes):
+    """A flat density for each exam."""
+    return np.concatenate([np.full(nodes, 1.0) for _ in EXAMS])
+
+
+def constraints(nodes, sizes, cohort, nested):
     """Normalise each density, then bound how they may stack up on each other.
 
     A linear function over a segment takes its extremes at the ends, so testing
@@ -107,25 +121,25 @@ def fit(observations, sizes, segments, overlap=0.0, nested=True, curvature=0.0):
     pairs = model.Pairs(observations, EXAMS, segments, sizes)
 
     def cost(params):
-        values = _values(params, nodes)
-        gaps = pairs.gaps(model.LinearAbilityPool(values, sizes))
+        ordinates = values(params, nodes)
+        gaps = pairs.gaps(model.LinearAbilityPool(ordinates, sizes))
         loss = float((pairs.weights * gaps * gaps).sum()) / pairs.weight_sum
         if curvature and segments > 1:
             loss += curvature * sum(float((np.diff(v, n=2) ** 2).sum())
-                                    for v in values.values())
+                                    for v in ordinates.values())
         return loss
 
     got = optimize.minimize(
         cost,
-        np.concatenate([np.full(nodes, 1.0) for _ in EXAMS]),
+        start(nodes),
         method="SLSQP",
-        bounds=[(0.0, cohort / sizes[exam]) for exam in EXAMS for _ in range(nodes)],
-        constraints=_constraints(nodes, sizes, cohort, nested),
+        bounds=bounds(nodes, cohort, sizes),
+        constraints=constraints(nodes, sizes, cohort, nested),
         options={"maxiter": 600, "ftol": 1e-11},
     )
     if not got.success:
         raise RuntimeError(f"complement fit failed: {got.message}")
-    pool = model.LinearAbilityPool(_values(got.x, nodes), sizes)
+    pool = model.LinearAbilityPool(values(got.x, nodes), sizes)
     pool.degrees = degrees(segments)
     pool.cohort = cohort
     return pool, model.residual(pool, observations)

@@ -71,3 +71,12 @@ The apparent contradiction is that a department normally screens about 3× its q
 The interviews for 統測 and 學測 are somewhere between 1.5x and 3x filters. Although a student might still end up at the school they want, they might get pushed to a worse department. I don't have a good way to handle this.
 
 Sounds great in theory but is it realistic to implement? Will the runtime be reasonable? Will it converge? Do we have enough datapoints to avoid overfitting?
+
+繁星 rank is within-school. The published cutoff is one national class-rank bar applied inside every nominating school, so the admitted set is a mixture over school means μ_s. That's a second
+  quadrature
+    dimension and one variance parameter. Nothing in the 繁星 cutoffs identifies the spread of μ_s — but high-school-destinations.tsv does, which is the natural use for that table. ---- I'm hesitant to
+  add complexity here. Do it without this at first and explain in a note somewhere how we would tack it on. ----- Screen ≠ admit. For 個申 and 甄選 the threshold is a 1.5–3× screen with review after, so
+  you need E[A | passed screen, top by review], with review as one more loaded measurement. That's your 24 matched
+    第八類 department-years earning their keep. ---- Same here, just treat these as thresholds for now, add to the note above about how to correct it. ---- A free spline density and a loading are
+  near-degenerate: both compress implied levels toward the middle, and only the specific inverse-Mills shape separates them. Pin participation first —
+    pool/complement.py's cohort-share constraint is exactly the right kind — and λ becomes identifiable. --- ok so pin a few parameters to make this correct?
