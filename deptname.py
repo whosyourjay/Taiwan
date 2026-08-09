@@ -14,7 +14,7 @@ TAIL = re.compile(r"^(.*[系科班程院])(.+組)$")
 
 
 def normalize(name):
-    name = re.split(r"[(（]", name)[0].strip()
+    name = re.split(r"[(（【]", name)[0].strip()
     m = TAIL.match(name)
     return m.group(1) if m else name
 

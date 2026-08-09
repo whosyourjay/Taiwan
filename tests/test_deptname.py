@@ -4,7 +4,7 @@ import unittest
 
 import rank_uac
 from deptname import normalize
-from lib.paths import path
+from lib.paths import data_path
 
 
 CASES = {
@@ -30,6 +30,7 @@ CASES = {
     "戲劇學系(男)": "戲劇學系",
     "機電工程學系（公費生）": "機電工程學系",
     "資訊管理學系(桃園校區)": "資訊管理學系",
+    "藝術史學系【外加】": "藝術史學系",
     "電子工程系(建工校區)_智慧資電系統技優專班": "電子工程系",
     # A name the PDF clipped mid-qualifier.
     "土木工程學系(科技暨基礎建設永續發展": "土木工程學系",
@@ -43,7 +44,7 @@ PARTS = ["資訊工程", "學系", "系", "科", "學士班", "學位學程", "�
 
 def dept_names():
     for name in rank_uac.SOURCES.values():
-        source = path(name)
+        source = data_path(name)
         if not os.path.exists(source):
             continue
         with open(source, encoding="utf-8") as f:

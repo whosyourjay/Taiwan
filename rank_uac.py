@@ -24,6 +24,7 @@ output, with `last_year` saying when they were last seen.
 """
 
 import collections
+import difflib
 import os
 
 import ceec_score
@@ -47,6 +48,8 @@ EXTRA = {
 ABSOLUTE = {"apply", "star", "star_eight"}
 # A 篩選 bar this much of the cohort clears did not screen anyone out.
 NON_BINDING = 0.95
+OCR_MATCH = 0.80
+OCR_MARGIN = 0.15
 
 
 def identify_department(row):
@@ -154,10 +157,54 @@ def load_admission_totals():
 def joinable(rows, known):
     """Keep only rows whose department also admits through 分發入學 that year.
 
-    OCR and abbreviation leave names that match nothing, and letting those
-    through would invent departments in the department ranking.
+    The same department may spell ``系`` or ``學系`` across admission paths;
+    compare the reporting key rather than that superficial spelling. 個申's
+    department cells are OCR, so an unambiguous close spelling can be repaired
+    against the departments its own school admits through 分發. Other paths are
+    text sources and must match exactly.
     """
-    return [r for r in rows if (r["year"], r["school"], r["dept"]) in known]
+    by_school = collections.defaultdict(dict)
+    for year, school, dept in known:
+        by_school[(year, school)][deptname.key(dept)] = dept
+    out = []
+    for row in rows:
+        candidates = by_school[(row["year"], row["school"])]
+        key = deptname.key(row["dept"])
+        if key in candidates:
+            row["dept"] = candidates[key]
+            out.append(row)
+            continue
+        if row.get("path") != "apply":
+            continue
+        matched = ocr_department(row["dept"], candidates)
+        if matched:
+            row["dept"] = matched
+            out.append(row)
+    return out
+
+
+def ocr_department(source, candidates):
+    """Return an unambiguous OCR repair from a school's known departments."""
+    source = chinese_chars(source)
+    if not source:
+        return None
+    scored = sorted(
+        (
+            difflib.SequenceMatcher(None, source, chinese_chars(value)).ratio(),
+            value,
+        )
+        for value in candidates.values()
+    )
+    if not scored:
+        return None
+    best, value = scored[-1]
+    next_best = scored[-2][0] if len(scored) > 1 else 0.0
+    return value if best >= OCR_MATCH and best - next_best >= OCR_MARGIN else None
+
+
+def chinese_chars(value):
+    """CJK department text, without OCR punctuation and Latin debris."""
+    return "".join(char for char in value if "\u4e00" <= char <= "\u9fff")
 
 
 def unify_spelling(rows):
