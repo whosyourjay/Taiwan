@@ -52,15 +52,24 @@ def midranks(counts):
     return values, percentiles
 
 
-def interpolate(xs, ys, x):
-    """Linear interpolation, held constant beyond the observed endpoints."""
+def interpolate(xs, ys, x, extrapolate=False):
+    """Linear interpolation, held constant beyond the observed endpoints.
+
+    With `extrapolate`, the end segments continue instead of flattening.
+    """
     i = bisect.bisect_right(xs, x)
     if i == 0:
-        return ys[0]
-    if i == len(xs):
-        return ys[-1]
+        if not extrapolate:
+            return ys[0]
+        i = 1
+    elif i == len(xs):
+        if not extrapolate:
+            return ys[-1]
+        i = len(xs) - 1
     x0, x1 = xs[i - 1], xs[i]
     y0, y1 = ys[i - 1], ys[i]
+    if x1 == x0:
+        return y0
     return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
 
@@ -93,6 +102,76 @@ def calibrate_fallbacks(rows):
             row["ceec_fallback"] = True
             calibrated += 1
     return calibrated
+
+
+# Longest first, so 數學A is never read as 數學 followed by a stray A. CAC prints
+# both the full names and one-character abbreviations, sometimes in one table.
+GSAT_TOKENS = ["數學A", "數學B", "國文", "英文", "數學", "社會", "自然", "英聽",
+               "數A", "數B", "國", "英", "數", "社", "自"]
+GSAT_FULL = {"數A": "數學A", "數B": "數學B", "國": "國文", "英": "英文",
+             "數": "數學", "社": "社會", "自": "自然"}
+
+
+def split_subjects(label):
+    """Split a 篩選 label such as 國英數自 into full subject names, or None.
+
+    Returns None rather than a partial list, so an unrecognised label is dropped
+    instead of being scored against the wrong set of subjects.
+    """
+    if not label:
+        return None
+    out, i = [], 0
+    while i < len(label):
+        for token in GSAT_TOKENS:
+            if label.startswith(token, i):
+                out.append(GSAT_FULL.get(token, token))
+                i += len(token)
+                break
+        else:
+            return None
+    return out
+
+
+class CohortPercentiles:
+    """學測 級分 distributions over everyone who sat the exam.
+
+    Unlike a rank within the rows we happened to collect, this is an absolute
+    quantity: it is referenced to the national cohort, so a department's number
+    does not move when another school is added to or missing from the sample.
+
+    CEEC publishes the distribution of every 2-4 subject total alongside the
+    single subjects, so a 國英數自 bar is a direct lookup. Nothing here assumes
+    the subjects are independent, or perfectly correlated, or anything else.
+    """
+
+    def __init__(self, rows):
+        self.counts = collections.defaultdict(collections.Counter)
+        for row in rows:
+            if row["exam"] != "gsat":
+                continue
+            seats = float(row["seats"])
+            if seats > 0:
+                self.counts[(str(row["year"]), row["subject"])][float(row["score"])] += seats
+
+    @classmethod
+    def load(cls, path):
+        with open(path, encoding="utf-8") as f:
+            return cls(csv.DictReader(f, delimiter="\t"))
+
+    def top_fraction(self, year, label, level):
+        """Share of the cohort scoring at or above `level` on `label`, or None.
+
+        None means the label named a subject set with no published distribution,
+        which is currently only 英聽 — reported as bands, not 級分.
+        """
+        subjects = split_subjects(label)
+        if not subjects:
+            return None
+        counts = self.counts.get((str(year), "、".join(subjects)))
+        if not counts:
+            return None
+        total = sum(counts.values())
+        return sum(n for score, n in counts.items() if score >= float(level)) / total
 
 
 class ScoreDistributions:
