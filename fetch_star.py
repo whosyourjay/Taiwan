@@ -21,8 +21,8 @@ OUT = os.path.join(HERE, "star")
 BASE = "https://www.cac.edu.tw/cacportal/star_his_report"
 GROUPS = ("one2seven", "eight")
 
-# The 8 schools we want fine distinctions for. 陽明 and 交通 merged into
-# 陽明交通 for 111 admissions, so no year lists all three.
+# The schools to fetch, or empty for every school the year lists. 陽明 and 交通
+# merged into 陽明交通 for 111 admissions, so no year lists all three.
 WANT = (
     "國立臺灣大學",
     "國立陽明交通大學",
@@ -76,7 +76,7 @@ def main(years):
         for group in GROUPS:
             listed = colleges(year, group)
             for code, name in sorted(listed.items()):
-                if name.strip() not in WANT:
+                if WANT and name.strip() not in WANT:
                     continue
                 n = fetch(year, group, code)
                 total += n

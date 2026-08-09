@@ -25,7 +25,7 @@ def main(years):
     for year in years:
         listed = {c: n.strip() for c, n in colleges(year, "one2seven").items()}
         for code, name in sorted(listed.items()):
-            if name not in WANT:
+            if WANT and name not in WANT:
                 continue
             body = get(f"{BASE}/{year}/{year}_sieve_standard/report/pict/{code}.png")
             if not body:
