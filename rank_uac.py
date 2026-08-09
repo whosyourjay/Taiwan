@@ -18,10 +18,9 @@ onto the 分發入學 axis. The two partially collected 學測 paths are then ma
 onto that fixed admitted-seat axis.
 
 Scores average all available rank evidence (108-114) within each admission path,
-then average paths by their annual admitted seats. Official national totals put
-unprocessed and rejected seats in the percentile denominator without assigning
-them to an entity. Entities that have closed or merged are kept and marked
-`active=0`.
+then average paths by their annual admitted seats. Seats with no cutoff data are
+counted in the intake totals but take no position on the axis. Entities that have
+closed or merged are kept, with `last_year` saying when they were last seen.
 """
 
 import collections
@@ -33,7 +32,7 @@ import gender
 import tsvio
 
 HERE = os.path.dirname(__file__)
-LATEST = "114"
+PATHS = ("uac", "tech", "star", "apply")
 SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
 ADMISSION_TOTALS = "admission-totals.tsv"
 # The 學測 routes into 一般大學, each its own exam field. `system` stays the kind
@@ -279,32 +278,25 @@ def aggregate(rows, key):
         path_groups = collections.defaultdict(list)
         for row in group:
             path_groups[row["path"]].append(row)
-        paths = []
-        for path_group in path_groups.values():
+        paths, by_path = [], {}
+        for path, path_group in path_groups.items():
             path_years = len({r["year"] for r in path_group})
             path_seats = sum(r["seats"] for r in path_group)
             if path_years and path_seats:
-                paths.append(
-                    {
-                        "score": wmean(path_group, "score"),
-                        "seats": path_seats / path_years,
-                    }
-                )
+                score = wmean(path_group, "score")
+                by_path[path] = score
+                paths.append({"score": score, "seats": path_seats / path_years})
         seats_avg = sum(path["seats"] for path in paths)
         if not seats_avg:
             continue
-        last_year = max(r["year"] for r in group)
-        years = len({r["year"] for r in group})
-        systems = {r["system"] for r in group}
         out.append(
             {
                 "key": name,
                 "score": wmean(paths, "score"),
-                "years": years,
-                "last_year": last_year,
-                "active": int(last_year == LATEST),
+                "years": len({r["year"] for r in group}),
+                "last_year": max(r["year"] for r in group),
                 "seats_avg": seats_avg,
-                "system": "both" if len(systems) > 1 else systems.pop(),
+                "by_path": by_path,
             }
         )
     return sorted(out, key=lambda d: -d["score"])
@@ -324,7 +316,9 @@ def write(path, header, ranked, counts):
             for name in names:
                 fields += [name, ""]
             fields += [f"{d['score']:.2f}", str(d["years"]), str(d["last_year"])]
-            fields += [str(d["active"]), f"{d['seats_avg']:.1f}", d["system"]]
+            fields += [f"{d['seats_avg']:.1f}"]
+            fields += [f"{d['by_path'][p]:.2f}" if p in d["by_path"] else ""
+                       for p in PATHS]
             found = counts(d["key"])
             if found and sum(found):
                 men, women = found
@@ -409,12 +403,11 @@ def build_rows():
         for row in path_rows:
             row["rank_basis"] = intercept + slope * row["pct"]
 
-    # National totals preserve every admitted student in the percentile cohort.
-    # A route with no rank data, an uncollected school, or a rejected OCR/join
-    # row contributes anonymous seats below the top-tail evidence only. It never
-    # creates an entity row or contributes to an entity's path average.
+    # Seats we hold no cutoff for are counted and reported, but they do not
+    # place themselves anywhere on the axis: an uncollected school is missing,
+    # not weak. They belong to the intake totals, not to the score.
     floors, residual = anonymous_seats(rows, load_admission_totals())
-    curve(rows, "rank_basis", "score", lambda r: r["year"], floors)
+    curve(rows, "rank_basis", "score", lambda r: r["year"])
     by_path = collections.Counter()
     for (_, path), missing in residual.items():
         by_path[path] += missing
@@ -436,7 +429,7 @@ def main():
     rows = build_rows()
     uac_rows = [r for r in rows if r["path"] == "uac"]
     tech_rows = [r for r in rows if r["path"] == "tech"]
-    tail = ["score", "years", "last_year", "active", "seats_avg", "system"]
+    tail = ["score", "years", "last_year", "seats_avg"] + list(PATHS)
     tail += ["men", "women", "pct_women"]
     by_dept_counts = gender.load()
     by_school_counts = gender.school_totals(by_dept_counts)

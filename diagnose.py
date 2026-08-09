@@ -20,7 +20,7 @@ import unicodedata
 
 import rank_uac
 
-PATHS = ["uac", "tech", "star", "apply"]
+PATHS = rank_uac.PATHS
 DEPTS_PER_SCHOOL = 5
 
 # Always shown where a school has them, since the two hardest departments in the
