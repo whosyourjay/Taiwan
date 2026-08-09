@@ -80,11 +80,52 @@ def tile(placed, total=None):
     return {exam: sorted(got) for exam, got in points.items()}, total
 
 
-def ability(points, exam, tops):
+def pooled(points):
+    """Seat-weighted ability at each distinct bar, with the seats behind it."""
+    weight = collections.defaultdict(float)
+    moment = collections.defaultdict(float)
+    for top, level, seats in points:
+        weight[top] += seats
+        moment[top] += seats * level
+    tops = sorted(weight)
+    return (np.array(tops), np.array([moment[t] / weight[t] for t in tops]),
+            np.array([weight[t] for t in tops]))
+
+
+def isotonic(levels, weights):
+    """The closest non-increasing curve, in seat-weighted least squares.
+
+    Reaching further down an exam's takers cannot reach a better student, so the
+    curve has to fall. Where the points rise instead, the rise is noise, and
+    pooling each rising run into its shared mean is what removes it.
+    """
+    blocks = []
+    for level, weight in zip(levels, weights):
+        blocks.append([level * weight, weight, 1])
+        while len(blocks) > 1 and (blocks[-2][0] / blocks[-2][1]
+                                   < blocks[-1][0] / blocks[-1][1]):
+            moment, weight, count = blocks.pop()
+            blocks[-1][0] += moment
+            blocks[-1][1] += weight
+            blocks[-1][2] += count
+    return np.concatenate([np.full(count, moment / weight)
+                           for moment, weight, count in blocks])
+
+
+def curve(points):
+    """One exam's bar-to-ability curve: distinct bars, pooled and made to fall."""
+    tops, levels, weights = pooled(points)
+    return tops, isotonic(levels, weights)
+
+
+def curves(points):
+    """Every exam's curve, built once so a caller can read it many times."""
+    return {exam: curve(got) for exam, got in points.items()}
+
+
+def ability(fitted, tops):
     """Where a top fraction of one exam's takers lands in the admitted pool."""
-    got = points[exam]
-    return np.interp(tops, [top for top, _, _ in got],
-                     [level for _, level, _ in got])
+    return np.interp(tops, *fitted)
 
 
 def scatter(points, exam, bands=10):
@@ -107,14 +148,15 @@ def scatter(points, exam, bands=10):
     return out
 
 
-def report(points, total, held):
+def report(points, fitted, total, held):
     exams = sorted(points)
     print(f"\n{held:,.0f} seats tiled into a pool of {total:,.0f}")
     for exam in exams:
-        print(f"  {exam:<8}{len(points[exam]):>6} curve points")
+        print(f"  {exam:<8}{len(points[exam]):>6} bars,"
+              f"{len(fitted[exam][0]):>6} distinct")
     print(f"\n{'top of takers':<16}" + "".join(f"{exam:>12}" for exam in exams))
-    for target in (0.01, 0.05, 0.10, 0.25, 0.50):
-        cells = "".join(f"{100 * ability(points, exam, target):>11.1f}%"
+    for target in (0.01, 0.05, 0.10, 0.25, 0.50, 0.75):
+        cells = "".join(f"{100 * ability(fitted[exam], target):>11.1f}%"
                         for exam in exams)
         print(f"top {100 * target:>4.0f}% of takers".ljust(16) + cells)
     print("\nspread of ability among departments quoting the same bar, by decile")
@@ -129,7 +171,11 @@ def main():
     placed = seats_in_order(rows, order, schools)
     held = sum(seats for *_, seats in placed)
     points, total = tile(placed)
-    report(points, total, held)
+    fitted = curves(points)
+    report(points, fitted, total, held)
+    from pool.tiling_plot import draw
+
+    print(f"\nwrote {draw(points, fitted, total)}")
 
 
 if __name__ == "__main__":

@@ -67,8 +67,45 @@ class TestTile(unittest.TestCase):
             (70.0, "gsat", 0.20, 10.0),
             (50.0, "gsat", 0.60, 80.0),
         ])
-        levels = tiling.ability(points, "gsat", [0.05, 0.20, 0.60])
+        levels = tiling.ability(tiling.curve(points["gsat"]), [0.05, 0.20, 0.60])
         self.assertEqual(list(levels), sorted(levels, reverse=True))
+
+
+class TestCurve(unittest.TestCase):
+    """Ties are pooled by seats, and a rising run is pooled away."""
+
+    def test_departments_sharing_a_bar_pool_by_seats(self):
+        # np.interp over the raw dots would land on whichever tie came last.
+        tops, levels = tiling.curve([
+            (0.5, 0.9, 90.0), (0.5, 0.1, 10.0),
+        ])
+        np.testing.assert_allclose(tops, [0.5])
+        np.testing.assert_allclose(levels, [0.82])
+
+    def test_a_rising_run_is_pooled_into_its_mean(self):
+        tops, levels = tiling.curve([
+            (0.1, 0.9, 1.0), (0.2, 0.2, 1.0), (0.3, 0.4, 1.0), (0.4, 0.1, 1.0),
+        ])
+        np.testing.assert_allclose(tops, [0.1, 0.2, 0.3, 0.4])
+        np.testing.assert_allclose(levels, [0.9, 0.3, 0.3, 0.1])
+
+    def test_an_already_falling_curve_is_left_alone(self):
+        got = [(0.1, 0.9, 1.0), (0.2, 0.5, 2.0), (0.3, 0.2, 3.0)]
+        _, levels = tiling.curve(got)
+        np.testing.assert_allclose(levels, [0.9, 0.5, 0.2])
+
+    def test_isotonic_never_rises_on_random_input(self):
+        rng = np.random.default_rng(20260809)
+        for _ in range(300):
+            count = int(rng.integers(1, 40))
+            levels = rng.uniform(0.0, 1.0, count)
+            weights = rng.uniform(0.1, 50.0, count)
+            got = tiling.isotonic(levels, weights)
+            self.assertEqual(len(got), count)
+            self.assertTrue((np.diff(got) <= 1e-9).all())
+            # Pooling moves mass around but never creates or destroys it.
+            self.assertAlmostEqual(float(got @ weights),
+                                   float(levels @ weights), places=9)
 
     def test_scatter_measures_how_far_apart_equal_bars_land(self):
         points, _ = tiling.tile([

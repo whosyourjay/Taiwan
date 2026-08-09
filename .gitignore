@@ -20,3 +20,4 @@ __pycache__/
 
 # Built by python3 -m pool.plot.
 pool-densities.png
+tiling-curves.png
