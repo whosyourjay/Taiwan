@@ -41,6 +41,9 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 - `rank-departments.tsv` — 3,040 (institution, department) pairs
 - `rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
   department merging
+- `high-school-destinations.tsv` — 110 北一女 graduate destinations
+- `high-school-entry-cutoffs.tsv` — 107 基北區 high-school entry cutoffs
+- `cap-grade-distributions.tsv` — 107 national CAP A/B/C category counts
 
 Columns: `rank school school_en [dept dept_en [application_group
 application_group_en]] score years last_year seats_avg uac tech star star_eight apply men
@@ -48,6 +51,32 @@ women pct_women`
 
 `school_en`, `dept_en` and `application_group_en` are intentionally blank join
 slots. English-name mappings are maintained outside this repository.
+
+`high-school-destinations.tsv` uses the columns `year high_school destination
+destination_type students reporting_floor graduates source_date`. Filter
+`destination_type=university` for the high-school-to-university matrix. The 110
+北一女 report names 14 universities receiving at least ten students: 675 of
+756 domestic destinations. It retains the other 81 domestic students and all
+28 overseas students as grouped rows, so missing university cells remain
+censored rather than zero. The destination and admission-path tables both total
+784 against 793 graduates; the data therefore records one destination per
+admitted graduate, not every offer. It does not affect the rankings.
+
+## High-school entry evidence
+
+Students in the 110 university-admission cohort entered high school in 107.
+`high-school-entry-cutoffs.tsv` starts that cohort's high-school input data
+with 52 general high schools in 基北區. `cap_score` is the reported marginal
+36-point 國中教育會考 score and measures selectivity, not the typical student's
+ability. The source is a third-party historical compilation, so rows carry
+`source_quality=third_party` and do not affect the rankings or pool fit.
+
+`cap-grade-distributions.tsv` holds MOE's national 107 counts for each
+five-subject A/B/C category. It supports later conversion of entrance results
+to national rank intervals. It cannot yet map a plus-mark cutoff such as 33.8
+to an exact percentile, because MOE does not publish the needed joint
+five-subject-plus distribution. We need district intake counts and a choice
+model before estimating an entering-school median.
 
 - `score` — 0-100 difficulty percentile among usable rows, combined across
   paths by average annual admitted seats.
@@ -216,6 +245,19 @@ saved by hand as `tech/tcte-{year}-scores.pdf` for 108-114.
     https://www.jctv.ntut.edu.tw/downloads/110/caac/repot_01.pdf
     https://www.jctv.ntut.edu.tw/downloads/110/caac/110_caac_minute.xls
 
+北一女中 110 學年度畢業生大學校系錄取人數統計表, in the 111 school-day
+handbook, pages 16–17:
+
+    https://www.fg.tp.edu.tw/wp-content/uploads/doc/curricula/111%E5%AD%B8%E6%A0%A1%E6%97%A5%E6%89%8B%E5%86%8A.pdf
+
+國中教育會考, 107 national achievement-category counts:
+
+    https://www.moe.gov.tw/News_Content.aspx?n=9E7AC85F1954DDA8&s=A72AAFB92D320802&sms=169B8E91BB75571F
+
+基北區, 107 historical high-school cutoffs (third-party compilation):
+
+    https://www.tkbgo.com.tw/schoolZone/university/article/toDetail?article_id=1905
+
 教育部統計處, 大專校院各校科系別學生數, for the gender columns:
 
     https://stats.moe.gov.tw/files/detail/{year}/{year}_students.csv   # 110-113
@@ -241,6 +283,10 @@ Downloaded inputs and auxiliary tables:
 - `tech/jctv-110-xuece-{screen.pdf,rules.xls}` — 科技校院四年制申請入學
   第一階段最低篩選標準 and its per-program weights and quotas. Together they
   produce `tech-apply-cutoffs.tsv` for the experimental test-pool fit.
+- `high-school/fg-110-destinations.pdf` — 北一女 110 graduate destinations.
+  `parse.high_school` preserves both named university rows and grouped remainder.
+- `entry/` — the official 107 CAP statistics page and the 107 基北 cutoff page.
+  `parse.cap` and `parse.entry` turn them into the two entry-evidence TSVs.
 
 ## Rebuild
 
@@ -259,6 +305,11 @@ Run commands from the repository root. Install Python packages with
     python3 -m parse.tcte      # tech/tcte-*-scores.pdf -> tongce-scores.tsv
     python3 -m fetch.tech_apply
     python3 -m parse.tech_apply  # 110 四技申請 -> tech-apply-cutoffs.tsv
+    python3 -m fetch.high_school
+    python3 -m parse.high_school  # 110 北一女 -> high-school-destinations.tsv
+    python3 -m fetch.entry
+    python3 -m parse.cap          # 107 CAP categories -> cap-grade-distributions.tsv
+    python3 -m parse.entry        # 107 基北 cutoffs -> high-school-entry-cutoffs.tsv
     python3 rank_uac.py        # all paths, bridge, gender -> rank-*.tsv
     python3 pool/fit.py        # joint fit report + pool-densities.png
     python3 -m pool.plot       # redraw only pool-densities.png
