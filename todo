@@ -1,16 +1,57 @@
 Fix art ranking. E.g. rank schools on individual exams somehow, or rank by groups that share the same set of exams.
 
-繁星 PDFs, year 114 only
-     ~130 PDFs, ~9MB. Proves the parse and gives one year of 在校學業 percentile
-
-An exam that runs easy lifts every cutoff that year. On the same 1,139
-departments, the mean 分發入學 cutoff moves 0.664 (108) to 0.551 (111) to 0.618
-(114) — a swing wider than the gap between the 1st and 30th university, and
-enough to reward whoever happens to admit in the generous years. Each year's
-mean is subtracted before pooling, measured over departments admitting in every
-year so that a changing mix of departments cannot pose as a change in
-difficulty. 統測 is levelled separately, against its own years.
 - This should be handled year-by-year. We should build an estimate of student percentile across the 2-4 test types we're using, then assign a final percentile to the admit track. Then when we pool across years, tracks, or departments we take a weighted average.
 - Parameters shared across year and track in the bridging formula should be the only connection between years
 
- I'm only trying to finely discern the top 10% of students. The best tech school is 國立臺灣科技大學 at 17% and department is 嘉南藥理大學    藥學系 at 13%. We should rip out the tech machinery and just say "all these tech students are bad and compress the scale for uac". Then the only number we need is number of tech admits.
+High school rank
+Xuece individual parts
+Xuece overall score for different subsets
+Zhikao
+Tongce score
+其他管道 - Mixture of IMO/IOI and sports
+  Quantify the fractions here
+  特殊選才
+
+Students who take no exam at all?
+
+To determine someone's skill
+  1. Ask school
+  2. Ask major
+  3. Check they didn't get in on sports
+
+High schools
+  科學班
+
+1. We can get matching year data.
+2. Yes I know this implied score is a threshold, that's all we got. I also know x% gpa means a different thing at different schools. It's all we got.
+3. Gates are either a subtest score or a total score. It seems that the data is very thin - just the 12%, 25%, and 50% levels rounded to n/15. We can still work with that, trying to fit the percent of people achieving each score, even if it's noisy. Or you could try to go digging for better data. We also know that the test score is defined as follows:
+  Take the top 1% of scores
+  Average, this is the threshold for 15
+  All other ranks are proportional
+So we actually know about 6 points on the curve and can assume it's normal (due to each test item having a percent chance of completion) or some similarly simple distribution. Fit to this distribution and compute the number of students at each score level. Or in the absolute worst case we can simulate.
+
+We also don't know the correlation between subtests or the count for people who took different subsets. They are likely correlated around 0.85 but we are going to effectively treat it as 1.0. This is what the ceec_score.formula_percentile does.
+
+As a followup, we count try to simulate a correlation between high school GPA and xuece. Or we could simulate different means and sds at different high schools on xuece combining with the cutoff.
+
+This is important because it's 50% of admits.
+
+
+學測 rescaled to 60 points - Does this "reveal" the student count at the 4 levels between a previous whole number?
+a gate resolves to one of 5 buckets - what is a gate? bucket?
+
+  In ceec_score.py, add a lookup keyed on (year, subject-set, level) returning the cohort percentile, with the abbreviation map (國英數自 → 國文、英文、數學、自然) since CAC
+  prints both spellings. Then in parse_apply.py or load_apply(), set basis from that instead of norm — keeping norm in the TSV so the existing bridge stays reproducible and the
+  two can be compared.
+
+  That's a real ranking change, not a refactor, so I'd rather you call it: swap apply onto the percentile basis, or land the lookup first and diff the two rankings before
+  committing to it?
+  --- Can you explain all this with some nice diagrams?
+
+
+How to fit tests
+  We have unknown pools of students taking the 3 tests (xuece, tongce, zhikao)
+  We fit a piecewise linear function (or step function if that's easier) to the pdfs of these three functions
+  Integrals must match the observed number of students
+  Probably we only want 2-3 steps or 2 linear pieces for each test. Optimize to reduce error in the agreement between thresholds where they overlap.
+  Test outcomes are percentiles in the test taker pool. All we want is to convert these to percentiles in the original pool. There is no need for any other fancy distortion or correlation.

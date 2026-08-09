@@ -12,24 +12,26 @@ of the academic-track students also took 分科測驗.
 
 | Path | How it works | 114學年度 national scale | Coverage here |
 | --- | --- | ---: | --- |
-| 一般大學 分發入學 | Exam score + ranked preferences | 32,497 admitted | Full: 108–114 |
-| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 admitted | Partial: 8 schools, 110–111 |
-| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 admitted | Partial: 8 schools, 110–111 |
+| 一般大學 分發入學 | 指考 + ranked preferences | 32,497 admitted | Rank + denominator: full, 108–114 |
+| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 admitted | Rank: 8 schools, 110–111; denominator: full, 108–114 |
+| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 admitted | Rank: 8 schools, 110–111; denominator: full, 108–114 |
 | 一般大學 其他管道 | Special selection and school-run admissions | 5,087 admitted | Not handled |
-| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 admitted | Full general intake: 108–114 |
-| 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 admitted | Not handled |
+| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 admitted | Rank: full general intake; denominator: full, 108–114 |
+| 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 admitted | Denominator only: full, 108–114 |
 | 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 admitted | Not handled |
 | 四技二專 技優保送 / 甄審 | Competition results; direct or screened placement | 228 / 3,078 admitted | Not handled |
 | 四技二專 特殊選才 | Skills, experience, or talent | 512 admitted | Not handled |
 | 科技校院 繁星推薦 | School recommendation + rank | 1,976 admitted | Not handled |
 
-“Coverage here” refers to admitted-seat records that actually enter `score`, not
-applicants. The repository contains 48,394 general-intake admissions across its
-two fully covered routes in 114. The slightly larger national 聯合登記分發
-figure includes additional-category places.
+“Rank” coverage means a row supplies evidence about a named school and
+department. “Denominator” coverage means its admitted seat is counted in the
+national percentile cohort. The repository contains named rank evidence for
+48,394 general-intake admissions across the two fully collected routes in 114.
+The official denominator additionally preserves the unparsed routes, schools,
+and rejected rows without attributing their seats to an entity.
 
-National counts are actual admissions from MOE [Education Statistics, table
-A1-18](https://stats.moe.gov.tw/files/ebook/Education_Statistics/115/115edu_EXCEL.htm).
+National counts are actual admissions from the annual MOE Education Statistics
+tables A1-17/A1-18; the [current edition is here](https://stats.moe.gov.tw/files/ebook/Education_Statistics/115/115edu_EXCEL.htm).
 Its technical-college table includes additional quotas but excludes admissions
 run separately by individual schools, for which it gives no central total. The
 broader route lists are maintained by the [大學多元入學升學網](https://nsdua.moe.edu.tw/)
@@ -49,8 +51,9 @@ pct_women`
 `school_en`, `dept_en` and `application_group_en` are intentionally blank join
 slots. English-name mappings are maintained outside this repository.
 
-- `score` — 0-100. Each admission path is scored on the common admitted-seat
-  axis, then the path scores are averaged by their annual admitted seats.
+- `score` — 0-100. Each admission path is scored on a common admitted-seat
+  axis whose denominator includes all official admissions in the five modeled
+  routes, then entity path scores are averaged by their usable annual seats.
 - `years` — number of distinct admission years represented by any covered path.
 - `seats_avg` — the sum of average annual seats in each collected admission path.
 - `active` — 1 if it still admitted students in 114.
@@ -129,18 +132,40 @@ paths. Each match receives the smaller of its two seat counts as weight.
 | Source path | Target | Fit |
 | --- | --- | --- |
 | 聯合登記分發 | 分發入學 | `uac = -15.11 + 0.7433 * tech` (`R² = 0.412`, `n = 315`) |
-| 繁星推薦 | Final UAC score | `score = 86.87 + 0.0988 * star` (`R² = 0.205`, `n = 355`) |
-| 個人申請 | Final UAC score | `score = 87.40 + 0.0910 * apply` (`R² = 0.179`, `n = 258`) |
+| 繁星推薦 | Provisional UAC rank | `rank = 86.87 + 0.0988 * star` (`R² = 0.205`, `n = 355`) |
+| 個人申請 | Provisional UAC rank | `rank = 87.40 + 0.0910 * apply` (`R² = 0.179`, `n = 258`) |
 
 The tech bridge uses `norm`-ordered percentiles on both sides. Replacing its UAC
 target with the CEEC order raises leave-one-school-out error from 11.60 to 12.63
 points, so CEEC changes UAC row order only after fitting this bridge.
 
-The final base score curves CEEC-ordered 分發 rows and bridged 聯登 rows together
-within each year. 繁星 and 個申 then map onto that fixed score; their partial
-eight-school sample never enters the reference distribution.
+The provisional base rank curves CEEC-ordered 分發 rows and bridged 聯登 rows
+together within each year. 繁星 and 個申 then map onto that fixed reference.
+Only this bridge fit depends on matched rank evidence; missing seats do not.
 
-### 5. Aggregate paths
+### 5. Restore missing seats to the denominator
+
+`admission-totals.tsv` records actual national admissions for 分發, 聯登,
+繁星, 個申 and 四技二專甄選 in every year 108–114. For year `y` and path `j`,
+the unranked residual is
+
+    missing_yj = official_admits_yj - seats in usable rows_yj
+
+“Usable” is deliberately late in the pipeline: a row rejected by OCR checks or
+the department join is missing here too. The final yearly curve is
+
+    score(r) = 100 * (anonymous seats_y + ranked seats below r
+                      + 0.5 * ranked seats tied with r)
+                     / (anonymous seats_y + all ranked seats_y)
+
+where `anonymous seats_y = sum_j missing_yj`. These seats sit below the
+top-tail evidence, which is the only placement needed for the intended top-10%
+comparison. They receive no score, create no school or department row, and do
+not enter `seats_avg`. As more schools and years are parsed successfully, seats
+move automatically from the anonymous residual to their inferred positions
+without changing the national denominator.
+
+### 6. Aggregate paths
 
 For entity `e` and path `j`, use all collected rows to compute
 
@@ -172,6 +197,11 @@ active in 114.
 - **Each subject has its own candidate field.** The equal-percentile model
   compares a student with the people who took each selected subject. Those
   populations differ, especially between humanities and science subjects.
+- **Anonymous seats are a top-tail approximation.** Unprocessed 繁星, 個申 and
+  四技二專甄選 seats count nationally but are placed below the ranked tail. This
+  avoids shrinking the top-10% cohort, but scores lower in the distribution are
+  not empirical placements of those students. Other admission routes shown in
+  the first table remain outside even this denominator.
 
 ## Sources
 
@@ -206,6 +236,9 @@ and OCR'd into `apply-cutoffs.tsv`. See Method.
 
 Downloaded inputs and auxiliary tables:
 
+- `admission-totals.tsv` — actual 108–114 admissions from the annual MOE
+  Education Statistics tables A1-17 (editions 109–114) and A1-18 (edition 115).
+  These counts supply denominator-only seats when rank evidence is unavailable.
 - `star/` — 繁星推薦 錄取標準, and `star-cutoffs.tsv` parsed from it.
   Joined rows contribute to `score` as a separate admission path.
 - `apply/` — 個人申請 篩選標準 PNGs, and `apply-cutoffs.tsv` OCR'd from them.
