@@ -319,6 +319,68 @@ def load_names():
     return out
 
 
+def name_cells(source):
+    """``(year, college code, department code, OCR name)`` from one image.
+
+    A name-only repair needs two narrow columns instead of the 23 columns a
+    complete parse reads. The existing TSV remains the authority for places,
+    screens and every other field.
+    """
+    year, college_code = os.path.basename(source)[:-4].split("-")
+    im = Image.open(source).convert("L")
+    grid_rows = grid(np.array(im) < 128)
+    counts = [len(vs) - 1 for _, _, vs in grid_rows]
+    n_cells = max(LAYOUTS, key=counts.count)
+    rows = [row for row in grid_rows if len(row[2]) - 1 == n_cells]
+    codes = read_column(im, rows, 0, DIGITS)
+    names = read_column(im, rows, 2, None)
+    return [
+        (year, college_code, code, name)
+        for code, name in zip(codes, names)
+        if len(code) >= 5 and name
+    ]
+
+
+def refresh_names(rows, readings, names):
+    """Repair TSV department names when a fresh OCR reading snaps to a source."""
+    by_code = {
+        (row["year"], row["college_code"], row["dept_code"]): row for row in rows
+    }
+    changed = missing = 0
+    for year, college_code, dept_code, ocr in readings:
+        row = by_code.get((year, college_code, dept_code))
+        if row is None:
+            missing += 1
+            continue
+        candidate_names = names.get(row["college"], ())
+        repaired = snap(ocr, candidate_names)
+        if repaired not in candidate_names or repaired == row["dept"]:
+            continue
+        row["dept"], row["dept_ocr"] = repaired, ocr
+        changed += 1
+    return changed, missing
+
+
+def refresh_names_from_images(out_path, years=()):
+    """Update trusted names from the source images without re-reading cutoffs."""
+    rows = list(tsvio.read_rows(out_path))
+    names = load_names()
+    wanted = set(years)
+    readings = []
+    for source in sorted(glob.glob(repo_path("apply", "*.png"))):
+        year = os.path.basename(source).split("-", 1)[0]
+        if wanted and year not in wanted:
+            continue
+        readings.extend(name_cells(source))
+    changed, missing = refresh_names(rows, readings, names)
+    written = tsvio.write_rows(out_path, rows)
+    print(
+        f"refreshed {changed} names; {missing} OCR codes absent from {out_path} "
+        f"({written} rows)",
+        file=sys.stderr,
+    )
+
+
 def main(out_path):
     colleges, names, rows = load_colleges(), load_names(), []
     for png in sorted(glob.glob(repo_path("apply", "*.png"))):
@@ -331,4 +393,7 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(data_path("apply-cutoffs.tsv"))
+    if sys.argv[1:2] == ["--names-only"]:
+        refresh_names_from_images(data_path("apply-cutoffs.tsv"), sys.argv[2:])
+    else:
+        main(data_path("apply-cutoffs.tsv"))
