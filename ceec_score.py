@@ -12,6 +12,8 @@ import bisect
 import collections
 import csv
 
+import numpy as np
+
 from parse import tcte
 
 
@@ -180,6 +182,10 @@ class ScoreDistributions:
         for key, counts in grouped.items():
             scores, percentiles = midranks(counts)
             self.quantiles[key] = (percentiles, scores)
+        self.by_exam = collections.defaultdict(set)
+        for year, exam, subject in self.quantiles:
+            self.by_exam[(year, exam)].add(subject)
+        self.curves = {}
 
     @classmethod
     def load(cls, *paths):
@@ -191,7 +197,7 @@ class ScoreDistributions:
 
     def subjects(self, year, exam):
         """Every subject name published for one exam in one year."""
-        return {s for y, e, s in self.quantiles if y == str(year) and e == exam}
+        return self.by_exam[(str(year), exam)]
 
     def subject_key(self, year, subject):
         """Map a UAC formula abbreviation to its CEEC exam and subject name."""
@@ -233,21 +239,29 @@ class ScoreDistributions:
             subjects.append((key, float(weight)))
         return subjects or None
 
+    def score_table(self, keys):
+        """A shared percentile grid and each subject's score along it.
+
+        Every subject's score is piecewise linear in the percentile, so any
+        weighted total of them bends only where one of the parts bends. A grid
+        holding every part's breakpoints describes all of those totals exactly,
+        whatever the weights, so it is built once per set of subjects.
+        """
+        if keys not in self.curves:
+            knots = {0.0, 1.0}
+            for key in keys:
+                knots.update(self.quantiles[key][0])
+            grid = np.array(sorted(knots))
+            self.curves[keys] = (grid, np.array(
+                [[self.subject_score(key, p) for p in grid] for key in keys]
+            ))
+        return self.curves[keys]
+
     def solve(self, subjects, cutoff):
         """The equal-subject percentile whose quantiles sum to `cutoff`."""
-        cutoff = float(cutoff)
-        low, high = 0.0, 1.0
-        for _ in range(40):
-            percentile = (low + high) / 2
-            total = sum(
-                weight * self.subject_score(key, percentile)
-                for key, weight in subjects
-            )
-            if total < cutoff:
-                low = percentile
-            else:
-                high = percentile
-        return (low + high) / 2
+        grid, table = self.score_table(tuple(key for key, _ in subjects))
+        weights = np.array([weight for _, weight in subjects])
+        return float(np.interp(float(cutoff), weights @ table, grid))
 
     def formula_percentile(self, year, formula, cutoff):
         """Return the equal-subject percentile matching a weighted total.
