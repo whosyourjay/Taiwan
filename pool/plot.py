@@ -1,11 +1,11 @@
 """Draw the fitted taker densities and the conversion they imply.
 
 Left: the count density for each exam, whose area is its observed number of
-takers. 學測 and 統測 are mirror images because every student sits one or the
-other, so at each ability they divide the cohort between them; 指考 draws again
-from students who already sat 學測 and so overlaps it freely. Right: what a
-position inside one exam's takers is worth on the cohort, which is the
-corresponding left-panel curve integrated.
+takers. 學測 and 統測 nearly mirror each other, because between them they cover
+the cohort at every ability and rise above it only by the students who sit both.
+指考 draws again from students who already sat 學測, so it overlaps it freely.
+Right: what a position inside one exam's takers is worth on the cohort, which is
+the corresponding left-panel curve integrated.
 """
 
 import matplotlib
@@ -24,7 +24,6 @@ STYLE = {
     "zhikao": ("#d1242f", "指考 / 分科測驗"),
     "tongce": ("#1a7f37", "統測"),
 }
-COVER = ("gsat", "tongce")
 FONTS = ["PingFang HK", "Heiti TC", "Arial Unicode MS", "Hiragino Sans GB"]
 
 
@@ -57,10 +56,10 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
         left.plot(x, y, color=colour, linewidth=2.4,
                   label=f"{label}  ({sizes.get(exam, 0):,.0f} takers)")
         left.fill_between(x, 0.0, y, color=colour, alpha=0.13)
-    cohort = sum(sizes.get(exam, 0) for exam in COVER) / 100.0
+    cohort = getattr(fitted, "cohort", 0.0) / 100.0
     if cohort:
         left.axhline(cohort, color="#57606a", linewidth=1.0, linestyle="--",
-                     label="學測 + 統測, the whole cohort")
+                     label="the whole cohort, which 學測 + 統測 covers")
     left.set_xlim(0, 100)
     left.set_ylim(0, max([cohort] + [density_curve(fitted, exam)[1].max()
                                      for exam in exams]) * 1.18)
