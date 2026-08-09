@@ -8,6 +8,7 @@ from unittest import mock
 
 import numpy as np
 
+from pool import complement
 from pool import model as pool
 from pool import plot as pool_plot
 from pool import fit as pool_fit
@@ -231,6 +232,88 @@ class TestFit(unittest.TestCase):
         self.assertEqual(pool.linear_degrees(exams, 3, ("zhikao",)), 8)
 
 
+SIZES = {"gsat": 126_287.0, "tongce": 83_706.0, "zhikao": 38_053.0}
+
+
+class TestComplement(unittest.TestCase):
+    """學測 and 統測 partition the cohort, so their densities always fill it."""
+
+    def observations(self):
+        return [
+            ("gsat", 0.10, "tongce", 0.20, 3.0),
+            ("gsat", 0.20, "zhikao", 0.25, 2.0),
+            ("tongce", 0.30, "zhikao", 0.35, 1.0),
+            ("gsat", 0.50, "tongce", 0.60, 4.0),
+        ]
+
+    def test_random_shares_always_fill_the_cohort(self):
+        rng = np.random.default_rng(20260809)
+        cohort = pool.cohort_size(SIZES)
+        for _ in range(200):
+            nodes = int(rng.integers(2, 7))
+            share = rng.uniform(0.0, 1.0, nodes)
+            built = complement.ComplementPool(share, rng.uniform(0.1, 2, nodes), SIZES)
+            total = (built.values["gsat"] * SIZES["gsat"]
+                     + built.values["tongce"] * SIZES["tongce"])
+            np.testing.assert_allclose(total, cohort, rtol=1e-9)
+
+    def test_recovers_a_planted_share(self):
+        # Thresholds generated from a known pool have to lead back to it. The
+        # planted share averages 0.6, which is exactly 學測's share of takers.
+        sizes = {"gsat": 120_000.0, "tongce": 80_000.0, "zhikao": 40_000.0}
+        planted = complement.ComplementPool([0.8, 0.4, 0.8, 0.4],
+                                            [0.2, 0.8, 1.6, 1.0], sizes)
+        observations = [
+            (left, top, right, matching_top(planted, left, top, right), 1.0)
+            for left, right in (("gsat", "tongce"), ("gsat", "zhikao"),
+                                ("tongce", "zhikao"))
+            for top in (0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95)
+        ]
+        fitted, mae = complement.fit(observations, sizes, 3)
+        self.assertLess(mae, 0.05)
+        np.testing.assert_allclose(fitted.share, planted.share, atol=0.01)
+        np.testing.assert_allclose(fitted.values["zhikao"],
+                                   planted.values["zhikao"], atol=0.01)
+
+    def test_zero_tail_and_normalisations_hold(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 3, zero_tail=True)
+        self.assertAlmostEqual(fitted.values["zhikao"][-1], 0.0, places=7)
+        for exam in fitted.exams:
+            self.assertAlmostEqual(float(fitted.masses(exam).sum()), 1.0, places=7)
+
+    def test_monotone_share_never_falls(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 3, monotone=True)
+        self.assertTrue((np.diff(fitted.share) >= -1e-7).all())
+
+    def test_nested_keeps_zhikao_under_gsat(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 3, nested=True)
+        self.assertTrue((fitted.values["zhikao"] * SIZES["zhikao"]
+                         <= fitted.values["gsat"] * SIZES["gsat"] + 1e-6).all())
+
+    def test_share_stays_a_share(self):
+        fitted, _ = complement.fit(self.observations(), SIZES, 4)
+        self.assertTrue((fitted.share >= -1e-9).all())
+        self.assertTrue((fitted.share <= 1 + 1e-9).all())
+
+    def test_degrees_drop_the_two_normalisations_and_any_zero_tail(self):
+        self.assertEqual(complement.degrees(3, False), 6)
+        self.assertEqual(complement.degrees(3, True), 5)
+        self.assertEqual(complement.degrees(1, False), 2)
+        with self.assertRaises(ValueError):
+            complement.degrees(0, False)
+
+    def test_rejects_missing_taker_counts(self):
+        with self.assertRaisesRegex(ValueError, "missing observed taker counts"):
+            complement.fit(self.observations(), {"gsat": 10, "tongce": 5}, 2)
+
+
+def matching_top(built, exam_a, top_a, exam_b):
+    """The top fraction of `exam_b` sitting at the same ability as `exam_a`'s."""
+    ability = built.ability(exam_a, top_a)
+    tops = np.linspace(0.0, 1.0, 200001)
+    return float(tops[np.argmin(np.abs(built.abilities(exam_b, tops) - ability))])
+
+
 class TestPlotCommand(unittest.TestCase):
     def test_main_wires_observations_counts_fit_and_draw(self):
         observations = [("a", 0.1, "b", 0.2, 1.0)]
@@ -239,14 +322,12 @@ class TestPlotCommand(unittest.TestCase):
                                return_value=([], observations)):
             with mock.patch.object(pool_fit, "taker_counts",
                                    return_value={"a": 10, "b": 20}):
-                with mock.patch.object(pool_plot.model, "fit_two_line",
+                with mock.patch.object(pool_fit, "fit_pool",
                                        return_value=(fitted, 1.5)) as fit:
                     with mock.patch.object(pool_plot, "draw",
                                            return_value="figure.png") as draw:
                         pool_plot.main()
-        fit.assert_called_once_with(
-            observations, ["a", "b"], {"a": 10, "b": 20},
-        )
+        fit.assert_called_once_with(observations, {"a": 10, "b": 20})
         draw.assert_called_once()
 
 

@@ -17,11 +17,21 @@ import ceec_score
 import rank_uac
 from lib import tsvio
 from lib.paths import path
-from pool import model
+from pool import complement, model
 
 # 110 is the year every school was collected for, and the last year 分發入學 ran
 # purely on 指考 — from 111 its formulas mix in 學測 subjects.
 YEAR = "110"
+
+# Held-out error picks these out in pool/compare.py. Four and five bends are a
+# coin flip against three, and 指考 sitting under 學測 never binds, so it costs
+# nothing to state.
+BENDS = 3
+
+
+def fit_pool(observations, sizes):
+    """Fit the chosen model: 學測 and 統測 split the cohort at every ability."""
+    return complement.fit(observations, sizes, BENDS, nested=True)
 
 
 EXAMS = {
@@ -161,9 +171,8 @@ def main():
     if not matched:
         print("no matched departments; nothing to fit", file=sys.stderr)
         return
-    exams = sorted({e for o in matched for e in (o[0], o[2])})
     sizes = taker_counts()
-    fitted, error = model.fit_two_line(matched, exams, sizes)
+    fitted, error = fit_pool(matched, sizes)
     report(fitted, matched, error)
     from pool.plot import draw
 

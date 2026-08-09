@@ -237,12 +237,14 @@ def is_unimodal(values):
     return False
 
 
-def _linear_problem(observations, exams, sizes, segments, zero_tails, curvature):
+def _linear_problem(observations, exams, sizes, segments, zero_tails, curvature,
+                    top_floor=()):
     """Pack a bounded linear-spline fit into an SLSQP objective."""
     problem = Pairs(observations, exams, segments, sizes)
     cap = {exam: cohort_size(sizes) / sizes[exam] for exam in exams}
     nodes = segments + 1
     bounds, start, constraints = [], [], []
+    tops = []
     weights = np.ones(nodes)
     weights[[0, -1]] = 0.5
     for exam in exams:
@@ -260,6 +262,16 @@ def _linear_problem(observations, exams, sizes, segments, zero_tails, curvature)
             constraints.append({
                 "type": "eq", "fun": lambda p, o=offset: p[o + nodes - 1],
             })
+        if exam in top_floor:
+            tops.append((offset + nodes - 1, sizes[exam]))
+    if tops:
+        # Nobody at the very top of the cohort skips every exam, so the named
+        # exams have to account for the whole cohort there between them.
+        floor = cohort_size(sizes)
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda p: sum(size * p[i] for i, size in tops) - floor,
+        })
 
     def cost(params):
         values = _linear_values(params, exams, segments)
@@ -276,7 +288,7 @@ def _linear_problem(observations, exams, sizes, segments, zero_tails, curvature)
 
 
 def fit_linear(observations, exams, sizes, segments, zero_tails=(), curvature=0.0,
-               require_unimodal=True):
+               require_unimodal=True, top_floor=()):
     """Fit capped, continuous linear densities, rejecting non-unimodal output."""
     if not observations:
         raise ValueError("no matched departments to fit against")
@@ -285,7 +297,7 @@ def fit_linear(observations, exams, sizes, segments, zero_tails=(), curvature=0.
         raise ValueError(f"missing observed taker counts: {sorted(missing)}")
     tails = frozenset(zero_tails)
     cost, bounds, constraints, start = _linear_problem(
-        observations, exams, sizes, segments, tails, curvature
+        observations, exams, sizes, segments, tails, curvature, frozenset(top_floor)
     )
     got = optimize.minimize(
         cost,

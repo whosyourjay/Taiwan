@@ -1,9 +1,11 @@
 """Draw the fitted taker densities and the conversion they imply.
 
-Left: the independent count density for each exam; its area is the observed
-number of takers. Curves may overlap by any amount because no student-level
-overlap is modeled. Right: what a position inside one exam's takers is worth on
-the cohort, which is the corresponding left-panel curve integrated.
+Left: the count density for each exam, whose area is its observed number of
+takers. 學測 and 統測 are mirror images because every student sits one or the
+other, so at each ability they divide the cohort between them; 指考 draws again
+from students who already sat 學測 and so overlaps it freely. Right: what a
+position inside one exam's takers is worth on the cohort, which is the
+corresponding left-panel curve integrated.
 """
 
 import matplotlib
@@ -22,6 +24,7 @@ STYLE = {
     "zhikao": ("#d1242f", "指考 / 分科測驗"),
     "tongce": ("#1a7f37", "統測"),
 }
+COVER = ("gsat", "tongce")
 FONTS = ["PingFang HK", "Heiti TC", "Arial Unicode MS", "Hiragino Sans GB"]
 
 
@@ -54,12 +57,16 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
         left.plot(x, y, color=colour, linewidth=2.4,
                   label=f"{label}  ({sizes.get(exam, 0):,.0f} takers)")
         left.fill_between(x, 0.0, y, color=colour, alpha=0.13)
+    cohort = sum(sizes.get(exam, 0) for exam in COVER) / 100.0
+    if cohort:
+        left.axhline(cohort, color="#57606a", linewidth=1.0, linestyle="--",
+                     label="學測 + 統測, the whole cohort")
     left.set_xlim(0, 100)
-    left.set_ylim(0, max(density_curve(fitted, exam)[1].max()
-                         for exam in exams) * 1.18)
+    left.set_ylim(0, max([cohort] + [density_curve(fitted, exam)[1].max()
+                                     for exam in exams]) * 1.18)
     left.set_xlabel("cohort ability percentile  (100 = top)")
     left.set_ylabel("test takers per cohort-percentile point")
-    left.set_title(f"Independent fitted test-pool densities, {year}")
+    left.set_title(f"Fitted test-pool densities, {year}")
     left.legend(loc="upper left", frameon=False, fontsize=9)
     left.grid(alpha=0.18)
 
@@ -93,9 +100,8 @@ def main():
     from pool import fit as pool_fit
 
     _, observations = pool_fit.observations()
-    exams = sorted({e for o in observations for e in (o[0], o[2])})
     sizes = pool_fit.taker_counts()
-    fitted, error = model.fit_two_line(observations, exams, sizes)
+    fitted, error = pool_fit.fit_pool(observations, sizes)
     written = draw(fitted, sizes, observations, error,
                    pool_fit.naive_error(observations), pool_fit.YEAR)
     print(f"wrote {written}")
