@@ -208,6 +208,34 @@ panel shows all three count densities, including the new 統測 curve, and the
 right panel shows their conversions from within-exam rank to original-cohort
 percentile. `python3 -m pool.plot` redraws the PNG without the text report.
 
+## Experimental noisy-measurement fit
+
+Everything above reads a bar as a place: clear it and you hold that ability.
+`python3 -m pool.factor` relaxes that. Ability is standard normal over the
+cohort and a measurement is `M = λ A + sqrt(1 - λ²) ε`, so at `λ = 1` the two
+readings agree and below it the students at a bar are a mix of ability and luck.
+Participation is unchanged and still carries a density per exam.
+
+繁星 is what makes `λ` identifiable, which is why this fit reads it and the
+density fits do not. It publishes a class-rank bar and a set of 學測 檢定 gates
+for the same admitted group, and the rate at which a stricter gate buys a looser
+rank bar is fixed by the correlation between the two measurements. Reshaping a
+density moves each bar's implication on its own and cannot touch that trade-off.
+Of 2,037 一至七類 rows with a rank bar, all but 7 carry a gate, and gate
+severity still varies by 1.51 nats once the rank bar is known.
+
+Conditional independence given ability makes every quantity here one integral
+over ability. The cost is squared disagreement over the variance of the levels
+it produced, because shrinking every `λ` at once pulls the levels together and
+would otherwise buy agreement for nothing.
+
+Two caveats. Without a school layer, `λ` for class rank absorbs between-school
+variance as noise, so it reads as a lower bound and stronger schools feeding
+stronger departments would bias it. And on the real bars every loading fits near
+1, class rank lowest at 0.95 — the ordering the model predicts, at a magnitude
+saying the gates do not yet pin it hard. The fit does recover a planted loading
+on generated bars, so that number is the data talking, not the estimator.
+
 ## Sources
 
 一般大學, 分發入學 (學測 + 分科測驗). 各系組最低錄取標準及錄取人數一覽表:
@@ -313,6 +341,7 @@ Run commands from the repository root. Install Python packages with
     python3 rank_uac.py        # all paths, bridge, gender -> rank-*.tsv
     python3 pool/fit.py        # joint fit report + pool-densities.png
     python3 -m pool.plot       # redraw only pool-densities.png
+    python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~40s
     python3 -m unittest
 
 Both CAC fetchers take the schools named in their `WANT` list, or every school
@@ -328,7 +357,9 @@ normalises 系組 names, `gender.py` joins the 教育部 student counts, and
 
 Off to the side, `diagnose.py` prints path scores for a fixed department sample.
 `python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
-exam-population model.
+exam-population model, `pool/compare.py` ranks its candidates on held-out
+departments, and `pool/factor.py` adds a noise level per measurement, reading
+the bars `pool/bars.py` builds.
 
 `parse.apply` needs tesseract with traditional Chinese:
 
