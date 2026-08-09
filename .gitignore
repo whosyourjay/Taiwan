@@ -11,7 +11,7 @@ uac/
 
 # Built by modules under parse/ and by rank_uac.py.
 *.tsv
-!admission-totals.tsv
+!data/admission-totals.tsv
 
 __pycache__/
 *.pyc

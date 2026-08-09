@@ -6,7 +6,7 @@ import sys
 from fetch.entry import SOURCES
 from lib import tsvio
 from lib.html_table import tables
-from lib.paths import path
+from lib.paths import data_path, path
 
 
 CATEGORY = re.compile(r"^\d+A\d+B\d+C$")
@@ -45,4 +45,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("cap-grade-distributions.tsv"))
+    main(data_path("cap-grade-distributions.tsv"))

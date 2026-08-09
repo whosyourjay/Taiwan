@@ -21,7 +21,7 @@ import sys
 import pdfplumber
 
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path, path
 
 # 檢定 subject column, then the 比序 item and its four value columns.
 GATE_SUBJECTS = ("國文", "英文", "數學", "數學A", "數學B", "社會", "自然", "英聽")
@@ -215,4 +215,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("star-cutoffs.tsv"))
+    main(data_path("star-cutoffs.tsv"))

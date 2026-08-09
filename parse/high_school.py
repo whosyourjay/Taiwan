@@ -12,7 +12,7 @@ import sys
 
 from fetch.high_school import SOURCES
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path, path
 from parse.uac import pdf_text
 
 
@@ -139,4 +139,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("high-school-destinations.tsv"))
+    main(data_path("high-school-destinations.tsv"))

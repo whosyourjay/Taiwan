@@ -11,7 +11,7 @@ import sys
 from fetch.entry import SOURCES
 from lib import tsvio
 from lib.html_table import tables
-from lib.paths import path
+from lib.paths import data_path, path
 
 
 DISTRICT = "基北區"
@@ -72,4 +72,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("high-school-entry-cutoffs.tsv"))
+    main(data_path("high-school-entry-cutoffs.tsv"))

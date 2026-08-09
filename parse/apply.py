@@ -29,7 +29,7 @@ import numpy as np
 from PIL import Image
 
 from lib import tsvio
-from lib.paths import path as repo_path
+from lib.paths import data_path, path as repo_path
 
 
 N_ORDERS = 6
@@ -303,8 +303,8 @@ def load_colleges():
 def load_names():
     """{school: {department names}} from the sources that ship as text."""
     out = {}
-    for source, col in ((repo_path("uac-cutoffs.tsv"), "dept"),
-                        (repo_path("star-cutoffs.tsv"), "dept")):
+    for source, col in ((data_path("uac-cutoffs.tsv"), "dept"),
+                        (data_path("star-cutoffs.tsv"), "dept")):
         if not os.path.exists(source):
             continue
         with open(source, encoding="utf-8") as f:
@@ -326,4 +326,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(repo_path("apply-cutoffs.tsv"))
+    main(data_path("apply-cutoffs.tsv"))

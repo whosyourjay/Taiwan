@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path, path
 
 # 指考 (through 110) uses 100 points; UAC academic scores from 111 use 60 levels.
 def max_per_subject(year):
@@ -115,4 +115,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("uac-cutoffs.tsv"))
+    main(data_path("uac-cutoffs.tsv"))

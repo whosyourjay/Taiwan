@@ -1,4 +1,4 @@
-"""Data files live in the repository root, whatever package reads them."""
+"""Stable locations for repository resources and derived tables."""
 
 import os
 
@@ -6,5 +6,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def path(*parts):
-    """Absolute path to a repository file, e.g. path("star", "*.pdf")."""
+    """Absolute path to a repository resource, e.g. ``path("star", "a.pdf")``."""
     return os.path.join(ROOT, *parts)
+
+
+def data_path(*parts):
+    """Absolute path to parsed or published input data."""
+    return path("data", *parts)
+
+
+def ranking_path(*parts):
+    """Absolute path to generated ranking tables."""
+    return path("rankings", *parts)

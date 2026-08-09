@@ -10,7 +10,7 @@ import re
 import sys
 
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path, path
 from parse.uac import pdf_text
 
 
@@ -114,4 +114,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("tech-apply-cutoffs.tsv"))
+    main(data_path("tech-apply-cutoffs.tsv"))

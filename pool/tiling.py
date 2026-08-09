@@ -24,7 +24,7 @@ from scipy import interpolate
 
 import rank_uac
 from lib import tsvio
-from lib.paths import path
+from lib.paths import ranking_path
 from pool import fit as pool_fit
 
 RANKING = "rank-departments.tsv"
@@ -38,7 +38,7 @@ def ranked(source=RANKING):
     stable enough that a department landing a little out of place moves nothing.
     """
     order, schools = {}, collections.defaultdict(list)
-    for row in tsvio.read_rows(path(source)):
+    for row in tsvio.read_rows(ranking_path(source)):
         rank_uac.identify_department(row)
         score = float(row["score"])
         order[(row["school"], row["dept"])] = score

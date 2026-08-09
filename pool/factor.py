@@ -318,12 +318,12 @@ Loaded = collections.namedtuple("Loaded", "groups sizes rows cohort")
 def load():
     """Every bar the fit compares, with the rows and cohort behind them."""
     import ceec_score
-    from lib.paths import path
+    from lib.paths import data_path
     from pool import bars, fit as pool_fit
 
     rows, _, _ = pool_fit.source_rows()
     pool_fit.attach_apply_tops(rows)
-    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
+    cohort = ceec_score.CohortPercentiles.load(data_path("ceec-scores.tsv"))
     groups = bars.observations(rows, pool_fit.exam_of, pool_fit.top_of, cohort)
     return Loaded(groups, pool_fit.taker_counts(), rows, cohort)
 

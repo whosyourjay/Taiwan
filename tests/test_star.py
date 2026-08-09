@@ -5,9 +5,9 @@ import re
 import subprocess
 import unittest
 
-from lib.paths import path
+from lib.paths import data_path, path
 
-TSV = path("star-cutoffs.tsv")
+TSV = data_path("star-cutoffs.tsv")
 
 # Values read off the PDFs by eye.
 SPOT = {

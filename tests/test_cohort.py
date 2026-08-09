@@ -7,10 +7,10 @@ import unittest
 import ceec_score
 import rank_uac
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path
 
-SCORES = path("ceec-scores.tsv")
-STAR = path("star-cutoffs.tsv")
+SCORES = data_path("ceec-scores.tsv")
+STAR = data_path("star-cutoffs.tsv")
 
 # 頂/前/均/後/底標 is the 級分 of the candidate at this percentile from the bottom.
 BANDS = [("頂標", 88), ("前標", 75), ("均標", 50), ("後標", 25), ("底標", 12)]

@@ -1,6 +1,6 @@
 import unittest
 
-from lib.paths import path
+from lib.paths import data_path
 from parse.uac import ART_MAX, max_score
 
 
@@ -21,7 +21,7 @@ class TestMaxScore(unittest.TestCase):
         import csv
         import os
 
-        source = path("uac-cutoffs.tsv")
+        source = data_path("uac-cutoffs.tsv")
         if not os.path.exists(source):
             self.skipTest("uac-cutoffs.tsv not built")
         with open(source, encoding="utf-8") as f:

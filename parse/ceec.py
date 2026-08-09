@@ -25,7 +25,7 @@ import os
 import re
 import sys
 
-from lib.paths import path as repo_path
+from lib.paths import data_path, path as repo_path
 
 GRADES = "ceec/zhikao/*各科級分人數百分比累計表*.xls"
 MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
@@ -147,4 +147,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(repo_path("ceec-scores.tsv"))
+    main(data_path("ceec-scores.tsv"))

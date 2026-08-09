@@ -16,7 +16,7 @@ if __package__ in (None, ""):
 import ceec_score
 import rank_uac
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path
 from pool import complement, model
 
 # 110 is the year every school was collected for, and the last year 分發入學 ran
@@ -64,7 +64,7 @@ def top_of(row):
 
 def attach_apply_tops(rows):
     """Read each 個人申請 bar against the 學測 級分 distribution."""
-    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
+    cohort = ceec_score.CohortPercentiles.load(data_path("ceec-scores.tsv"))
     got = 0
     for row in rows:
         if row["path"] != "apply":
@@ -79,7 +79,7 @@ def attach_apply_tops(rows):
 def load_tech_apply(distributions):
     """Read 四技申請 weighted 學測 screens as national GSAT percentiles."""
     rows = []
-    source = path("tech-apply-cutoffs.tsv")
+    source = data_path("tech-apply-cutoffs.tsv")
     for row in tsvio.read_rows(source):
         percentile = distributions.gsat_percentile(
             row["year"], row["subjects"], row["cutoff"]
@@ -143,9 +143,9 @@ def source_rows():
     cannot change this experimental input.
     """
     distributions = ceec_score.ScoreDistributions.load(
-        path("ceec-scores.tsv"), path("tongce-scores.tsv")
+        data_path("ceec-scores.tsv"), data_path("tongce-scores.tsv")
     )
-    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
+    cohort = ceec_score.CohortPercentiles.load(data_path("ceec-scores.tsv"))
     uac_rows = list(rank_uac.load("uac", distributions))
     tech_rows = list(rank_uac.load("tech", distributions))
     rank_uac.unify_spelling(uac_rows + tech_rows)
@@ -191,7 +191,7 @@ def taker_counts():
 
     totals = collections.defaultdict(lambda: collections.defaultdict(float))
     for name in ("ceec-scores.tsv", "tongce-scores.tsv"):
-        with open(path(name), encoding="utf-8") as f:
+        with open(data_path(name), encoding="utf-8") as f:
             for row in csv.DictReader(f, delimiter="\t"):
                 if row["year"] != YEAR or "、" in row["subject"]:
                     continue

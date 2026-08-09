@@ -30,8 +30,8 @@ import ceec_score
 import deptname
 import gender
 from lib import tsvio
+from lib.paths import data_path, ranking_path
 
-HERE = os.path.dirname(__file__)
 PATHS = ("uac", "tech", "star", "star_eight", "apply")
 SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}
 ADMISSION_TOTALS = "admission-totals.tsv"
@@ -61,7 +61,7 @@ def load(system, distributions=None):
     Department names are normalised, so the several 組 a department admits
     through arrive under one name.
     """
-    for row in tsvio.read_rows(os.path.join(HERE, SOURCES[system])):
+    for row in tsvio.read_rows(data_path(SOURCES[system])):
         row["system"] = system
         row["path"] = system
         identify_department(row)
@@ -93,7 +93,7 @@ def load_star(group="one2seven"):
     a pre-interview screen, so it keeps its own path and uses its quota rather
     than its screened count as the aggregation weight.
     """
-    for row in tsvio.read_rows(os.path.join(HERE, EXTRA["star"])):
+    for row in tsvio.read_rows(data_path(EXTRA["star"])):
         admitted = int(row["admitted"] or 0)
         if row["group"] != group or not row["gpa"] or not admitted:
             continue
@@ -121,7 +121,7 @@ def load_apply(cohort):
     share of everyone who sat the exam who cleared it. A bar almost nobody fails
     says only that this 篩選順序 was not what bound, so those rows are dropped.
     """
-    for row in tsvio.read_rows(os.path.join(HERE, EXTRA["apply"])):
+    for row in tsvio.read_rows(data_path(EXTRA["apply"])):
         if not row["norm"] or not row["dept"].strip():
             continue
         norm = float(row["norm"])
@@ -143,7 +143,7 @@ def load_apply(cohort):
 def load_admission_totals():
     """Official admitted seats by year and path, including unparsed schools."""
     totals = {}
-    for row in tsvio.read_rows(os.path.join(HERE, ADMISSION_TOTALS)):
+    for row in tsvio.read_rows(data_path(ADMISSION_TOTALS)):
         key = (row["year"], row["path"])
         if key in totals:
             raise ValueError(f"duplicate admission total for {key}")
@@ -340,9 +340,9 @@ def build_rows():
     Split out from main() so a diagnostic can read the per-path scores that the
     rankings then average away.
     """
-    scores = os.path.join(HERE, "ceec-scores.tsv")
+    scores = data_path("ceec-scores.tsv")
     distributions = ceec_score.ScoreDistributions.load(
-        scores, os.path.join(HERE, "tongce-scores.tsv")
+        scores, data_path("tongce-scores.tsv")
     )
     cohort = ceec_score.CohortPercentiles.load(scores)
     uac_rows = list(load("uac", distributions))
@@ -445,6 +445,7 @@ def build_rows():
 
 
 def main():
+    os.makedirs(ranking_path(), exist_ok=True)
     rows = build_rows()
     uac_rows = [r for r in rows if r["path"] == "uac"]
     tech_rows = [r for r in rows if r["path"] == "tech"]
@@ -453,19 +454,19 @@ def main():
     by_dept_counts = gender.load()
     by_school_counts = gender.school_totals(by_dept_counts)
     write(
-        os.path.join(HERE, "rank-universities.tsv"),
+        ranking_path("rank-universities.tsv"),
         ["rank", "school", "school_en"] + tail,
         aggregate(rows, lambda r: r["school"]),
         lambda school: by_school_counts.get(school),
     )
     write(
-        os.path.join(HERE, "rank-departments.tsv"),
+        ranking_path("rank-departments.tsv"),
         ["rank", "school", "school_en", "dept", "dept_en"] + tail,
         aggregate(rows, lambda r: (r["school"], r["dept"])),
         lambda key: gender.lookup(by_dept_counts, *key),
     )
     write(
-        os.path.join(HERE, "rank-application-groups.tsv"),
+        ranking_path("rank-application-groups.tsv"),
         [
             "rank",
             "school",

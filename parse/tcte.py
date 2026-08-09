@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-from lib.paths import path as repo_path
+from lib.paths import data_path, path as repo_path
 from parse.ceec import mark_midpoint
 from parse.uac import pdf_text
 
@@ -151,4 +151,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(repo_path("tongce-scores.tsv"))
+    main(data_path("tongce-scores.tsv"))

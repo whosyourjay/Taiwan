@@ -13,7 +13,7 @@ import re
 import sys
 
 from lib import tsvio
-from lib.paths import path
+from lib.paths import data_path, path
 from parse.uac import pdf_text
 
 MAX_PER_SUBJECT = 100.0
@@ -94,4 +94,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(path("tech-cutoffs.tsv"))
+    main(data_path("tech-cutoffs.tsv"))
