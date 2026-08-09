@@ -253,7 +253,7 @@ class ScoreDistributions:
                 knots.update(self.quantiles[key][0])
             grid = np.array(sorted(knots))
             self.curves[keys] = (grid, np.array(
-                [[self.subject_score(key, p) for p in grid] for key in keys]
+                [np.interp(grid, *self.quantiles[key]) for key in keys]
             ))
         return self.curves[keys]
 
