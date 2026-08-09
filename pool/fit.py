@@ -7,11 +7,16 @@ gap between the abilities they imply is the error to minimise.
 
 import collections
 import contextlib
-import math
+import os
 import sys
+
+# A file invocation puts pool/, rather than the repository root, on sys.path.
+if __package__ in (None, ""):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ceec_score
 import rank_uac
+from lib import tsvio
 from lib.paths import path
 from pool import model
 
@@ -21,7 +26,13 @@ YEAR = "110"
 BINS = 3
 
 
-EXAMS = {"uac": "zhikao", "tech": "tongce", "star": "gsat", "apply": "gsat"}
+EXAMS = {
+    "uac": "zhikao",
+    "tech": "tongce",
+    "star": "gsat",
+    "apply": "gsat",
+    "tech_apply": "gsat",
+}
 
 
 def exam_of(row):
@@ -31,7 +42,7 @@ def exam_of(row):
 
 def top_of(row):
     """Share of that exam's takers who cleared the bar."""
-    if row["path"] in ("uac", "tech"):
+    if row["path"] in ("uac", "tech", "tech_apply"):
         percentile = row.get("ceec_percentile")
         return None if percentile is None else 1.0 - percentile
     if row["path"] == "apply":
@@ -55,6 +66,25 @@ def attach_apply_tops(rows):
     return got
 
 
+def load_tech_apply(distributions):
+    """Read 四技申請 weighted 學測 screens as national GSAT percentiles."""
+    rows = []
+    source = path("tech-apply-cutoffs.tsv")
+    for row in tsvio.read_rows(source):
+        percentile = distributions.gsat_percentile(
+            row["year"], row["subjects"], row["cutoff"]
+        )
+        top = None if percentile is None else 1.0 - percentile
+        if row["year"] != YEAR or top is None or top >= rank_uac.NON_BINDING:
+            continue
+        row["system"], row["path"] = "tech", "tech_apply"
+        rank_uac.identify_department(row)
+        row["seats"] = int(row["seats"])
+        row["ceec_percentile"] = percentile
+        rows.append(row)
+    return rows
+
+
 def naive_error(observations):
     """Disagreement if a percentile inside one exam is read as another's."""
     total = weight = 0.0
@@ -62,46 +92,6 @@ def naive_error(observations):
         total += w * abs(top_a - top_b)
         weight += w
     return 100.0 * total / weight if weight else 0.0
-
-
-GLYPHS = {"gsat": "o", "zhikao": "x", "tongce": "+"}
-NAMES = {"gsat": "學測", "zhikao": "指考/分科測驗", "tongce": "統測"}
-
-
-def plot_densities(pool_fit, height=16, width=66):
-    """Overlaid step plot of every exam's taker density over cohort ability.
-
-    Each curve is independent and they may overlap by any amount. Drawing them
-    on one axis shows where a percentile in one exam stops meaning what it means
-    in another; it says nothing about which students sat both.
-    """
-    exams = sorted(pool_fit.shares)
-    density = {e: pool_fit.percentile_density(e) for e in exams}
-    ceiling = math.ceil(max(max(d) for d in density.values()) / 100) * 100
-
-    print("\ntakers per cohort-percentile point"
-          "   (area under a curve = observed takers)")
-    for row in range(height, 0, -1):
-        level = ceiling * row / height
-        line = ""
-        for col in range(width):
-            k = min(pool_fit.bins - 1, col * pool_fit.bins // width)
-            hit = [e for e in exams if density[e][k] >= level]
-            line += "#" if len(hit) > 1 else (GLYPHS.get(hit[0], "*") if hit else " ")
-        print(f"  {level:5.0f} |{line}")
-    print("        +" + "-" * width)
-    ticks = "        "
-    for mark in (0, 25, 50, 75, 100):
-        cell = 1 + mark * (width - 1) // 100
-        ticks = ticks.ljust(8 + cell - len(str(mark)) // 2) + str(mark)
-    print(ticks)
-    print(" " * 8 + "cohort ability percentile (100 = top)")
-    print("  " + "   ".join(f"{GLYPHS.get(e, '*')} {NAMES.get(e, e)}" for e in exams)
-          + "   # two or more")
-    missing = [e for e in NAMES if e not in exams]
-    if missing:
-        print("  not fitted: " + ", ".join(NAMES[e] for e in missing)
-              + " — no published score distribution collected yet")
 
 
 def report(pool_fit, observations, error):
@@ -126,8 +116,6 @@ def report(pool_fit, observations, error):
         print("  " + f"{exam:<9}{pool_fit.sizes[exam]:>11,.0f}"
               + "".join(f"{n:>12,.0f}" for n in counts))
 
-    plot_densities(pool_fit)
-
     print("\nwhere a bar lands on the cohort, by exam")
     names = sorted(pool_fit.shares)
     print("  " + f"{'top of takers':<20}" + "".join(f"{e:>12}" for e in names))
@@ -141,8 +129,13 @@ def observations():
     with contextlib.redirect_stdout(sys.stderr):
         rows = rank_uac.build_rows()
     resolved = attach_apply_tops(rows)
+    distributions = ceec_score.ScoreDistributions.load(path("ceec-scores.tsv"))
+    tech_apply = load_tech_apply(distributions)
+    rows += tech_apply
+    rank_uac.unify_spelling(rows)
     matched = model.matched(rows, exam_of, top_of)
     print(f"{resolved} 個人申請 bars read against the 學測 cohort", file=sys.stderr)
+    print(f"{len(tech_apply)} 四技申請 bars read against the 學測 cohort", file=sys.stderr)
     return rows, matched
 
 
@@ -155,6 +148,12 @@ def main():
     sizes = taker_counts()
     fitted, error = model.fit(matched, exams, sizes, bins=BINS)
     report(fitted, matched, error)
+    from pool.plot import draw
+
+    written = draw(
+        fitted, sizes, matched, error, naive_error(matched), YEAR
+    )
+    print(f"\nwrote {written}")
 
 
 def taker_counts():

@@ -1,5 +1,8 @@
 """Tests for the cohort-ability model."""
 
+import os
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -7,6 +10,10 @@ import numpy as np
 
 from pool import model as pool
 from pool import plot as pool_plot
+from pool import fit as pool_fit
+
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class TestAbility(unittest.TestCase):
@@ -89,6 +96,33 @@ class TestMatched(unittest.TestCase):
         self.assertAlmostEqual(got[0][1], 0.15)
 
 
+class TestTechApplyRows(unittest.TestCase):
+    def test_loads_binding_110_gsat_screen_only(self):
+        rows = [
+            {
+                "year": "110", "school": "A", "dept": "工程系甲組",
+                "subjects": "國文x1.00", "cutoff": "10", "seats": "20",
+            },
+            {
+                "year": "110", "school": "A", "dept": "管理系",
+                "subjects": "國文x1.00", "cutoff": "1", "seats": "10",
+            },
+            {
+                "year": "109", "school": "A", "dept": "資訊系",
+                "subjects": "國文x1.00", "cutoff": "10", "seats": "5",
+            },
+        ]
+        distributions = mock.Mock()
+        distributions.gsat_percentile.side_effect = [0.75, 0.01, 0.75]
+        with mock.patch.object(pool_fit.tsvio, "read_rows", return_value=rows):
+            got = pool_fit.load_tech_apply(distributions)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["path"], "tech_apply")
+        self.assertEqual(got[0]["dept"], "工程系")
+        self.assertEqual(got[0]["seats"], 20)
+        self.assertAlmostEqual(pool_fit.top_of(got[0]), 0.25)
+
+
 class TestFit(unittest.TestCase):
     def observations_from(self, truth, bars):
         """Bars that agree exactly under `truth`, so a good fit recovers it."""
@@ -157,9 +191,9 @@ class TestPlotCommand(unittest.TestCase):
     def test_main_wires_observations_counts_fit_and_draw(self):
         observations = [("a", 0.1, "b", 0.2, 1.0)]
         fitted = pool.AbilityPool({"a": [0.5, 0.5], "b": [0.5, 0.5]}, 2)
-        with mock.patch.object(pool_plot.pool_fit, "observations",
+        with mock.patch.object(pool_fit, "observations",
                                return_value=([], observations)):
-            with mock.patch.object(pool_plot.pool_fit, "taker_counts",
+            with mock.patch.object(pool_fit, "taker_counts",
                                    return_value={"a": 10, "b": 20}):
                 with mock.patch.object(pool_plot.model, "fit",
                                        return_value=(fitted, 1.5)) as fit:
@@ -168,9 +202,24 @@ class TestPlotCommand(unittest.TestCase):
                         pool_plot.main()
         fit.assert_called_once_with(
             observations, ["a", "b"], {"a": 10, "b": 20},
-            bins=pool_plot.pool_fit.BINS,
+            bins=pool_fit.BINS,
         )
         draw.assert_called_once()
+
+
+class TestDirectCommand(unittest.TestCase):
+    def test_fit_script_runs_from_its_file_path(self):
+        got = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "pool", "fit.py")],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertIn("matched threshold pairs", got.stdout)
+        self.assertIn("wrote", got.stdout)
 
 
 if __name__ == "__main__":

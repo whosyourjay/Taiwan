@@ -13,7 +13,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (after the backend is fixed)
 
 from lib.paths import path  # noqa: E402
-from pool import fit as pool_fit  # noqa: E402
 from pool import model  # noqa: E402
 
 OUT = path("pool-densities.png")
@@ -83,6 +82,8 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
 
 
 def main():
+    from pool import fit as pool_fit
+
     _, observations = pool_fit.observations()
     exams = sorted({e for o in observations for e in (o[0], o[2])})
     sizes = pool_fit.taker_counts()

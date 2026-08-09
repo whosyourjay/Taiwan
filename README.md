@@ -18,7 +18,7 @@ of the academic-track students also took 分科測驗.
 | 一般大學 其他管道 | Special selection and school-run admissions | 5,087 admitted | Not handled |
 | 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 admitted | Full general intake, 108–114 |
 | 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 admitted | Count only; not scored |
-| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 admitted | Not handled |
+| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 admitted | Bridge evidence, 110 |
 | 四技二專 技優保送 / 甄審 | Competition results; direct or screened placement | 228 / 3,078 admitted | Not handled |
 | 四技二專 特殊選才 | Skills, experience, or talent | 512 admitted | Not handled |
 | 科技校院 繁星推薦 | School recommendation + rank | 1,976 admitted | Not handled |
@@ -152,14 +152,22 @@ The conversion finds the original-cohort percentile `x` satisfying
     integral_x^1 q_e(u) du = p * N_e
 
 The fit minimizes seat-weighted disagreement in `x` where the same department
-has thresholds from two exams. It uses 1,078 學測–指考, 45 統測–指考, and 38
-學測–統測 threshold pairs. Three steps reduce mean disagreement from 19.42 to
-9.65 cohort-percentile points. Counts only scale each independent density; they
-do not distort its percentile conversion or assert which students took both.
+has thresholds from two exams. It uses 1,078 學測–指考, 45 統測–指考, and 418
+學測–統測 threshold pairs. The latter now include 110 四技日間部申請入學:
+the cutoff report supplies a weighted 學測 screen and the program workbook
+supplies its subject weights and quota. Of 518 joined rows, 441 have a binding
+screen and add 380 same-department 學測–統測 matches; with the prior 38, that
+bridge now has 418 pairs. They are bridge evidence only, not final admission
+cutoffs and not an added ranking path.
 
-`python3 -m pool.plot` writes `pool-densities.png`. The left panel shows all
-three count densities, including the new 統測 curve, and the right panel shows
-their conversions from within-exam rank to original-cohort percentile.
+Three steps reduce mean disagreement from 18.63 to 9.96 cohort-percentile
+points. Counts only scale each independent density; they do not distort its
+percentile conversion or assert which students took both.
+
+`python3 pool/fit.py` reports the fit and writes `pool-densities.png`. The left
+panel shows all three count densities, including the new 統測 curve, and the
+right panel shows their conversions from within-exam rank to original-cohort
+percentile. `python3 -m pool.plot` redraws the PNG without the text report.
 
 ## Sources
 
@@ -192,6 +200,12 @@ and OCR'd into `apply-cutoffs.tsv`. See Method.
 技專校院入學測驗中心, 統測 成績人數累計表 (open data 報表B2). One PDF a year,
 saved by hand as `tech/tcte-{year}-scores.pdf` for 108-114.
 
+科技校院日間部四年制申請入學, 110 第一階段最低篩選標準 and the companion
+招生學校系(組)、學程 data workbook:
+
+    https://www.jctv.ntut.edu.tw/downloads/110/caac/repot_01.pdf
+    https://www.jctv.ntut.edu.tw/downloads/110/caac/110_caac_minute.xls
+
 教育部統計處, 大專校院各校科系別學生數, for the gender columns:
 
     https://stats.moe.gov.tw/files/detail/{year}/{year}_students.csv   # 110-113
@@ -214,9 +228,9 @@ Downloaded inputs and auxiliary tables:
 - `tech/tcte-*-scores.pdf` — 統測 成績人數累計表, one-point bands over 42
   subjects. `parse.tcte` extracts 108-114 into `tongce-scores.tsv`. The
   experimental pool model uses it; the ranking bridge still uses `norm`.
-- `tech/jctv-*-xuece-screen.pdf` — 科技校院四年制申請入學 第一階段最低篩選標準,
-  the 學測 route by which 科大 admit 高中 students. An alternative bridge, but
-  it reports a screening threshold rather than a final cutoff.
+- `tech/jctv-110-xuece-{screen.pdf,rules.xls}` — 科技校院四年制申請入學
+  第一階段最低篩選標準 and its per-program weights and quotas. Together they
+  produce `tech-apply-cutoffs.tsv` for the experimental test-pool fit.
 
 ## Rebuild
 
@@ -233,9 +247,11 @@ Run commands from the repository root. Install Python packages with
     python3 -m fetch.ceec      # optional; refresh ceec/
     python3 -m parse.ceec      # ceec/*.xls -> ceec-scores.tsv
     python3 -m parse.tcte      # tech/tcte-*-scores.pdf -> tongce-scores.tsv
+    python3 -m fetch.tech_apply
+    python3 -m parse.tech_apply  # 110 四技申請 -> tech-apply-cutoffs.tsv
     python3 rank_uac.py        # all paths, bridge, gender -> rank-*.tsv
-    python3 -m pool.fit        # jointly fit the three independent test pools
-    python3 -m pool.plot       # -> pool-densities.png
+    python3 pool/fit.py        # joint fit report + pool-densities.png
+    python3 -m pool.plot       # redraw only pool-densities.png
     python3 -m unittest
 
 Both CAC fetchers take the schools named in their `WANT` list, or every school

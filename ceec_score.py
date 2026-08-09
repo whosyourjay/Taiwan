@@ -260,6 +260,16 @@ class ScoreDistributions:
         )
         return self.solve(subjects, cutoff) if subjects else None
 
+    def gsat_percentile(self, year, formula, cutoff):
+        """Read a weighted native 0-15 學測 total against 學測 takers."""
+        def key_of(subject):
+            name = GSAT_FULL.get(subject, subject)
+            key = (str(year), "gsat", name)
+            return key if key in self.quantiles else None
+
+        subjects = self.weighted_subjects(formula, key_of)
+        return self.solve(subjects, cutoff) if subjects else None
+
     def tongce_percentile(self, year, formula, cutoff, group):
         """The same reading of a 統測 weighted total, against 統測's own takers."""
         subjects = self.weighted_subjects(

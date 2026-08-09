@@ -44,6 +44,18 @@ class TestScoreDistributions(unittest.TestCase):
             self.scores.formula_percentile("114", "國x1.00 術x2.00", 100)
         )
 
+    def test_native_gsat_formula_uses_gsat_distributions(self):
+        rows = score_rows("110", "gsat", "國文", [(0, 10), (10, 10)])
+        rows += score_rows("110", "gsat", "英文", [(0, 10), (20, 10)])
+        scores = ScoreDistributions(rows)
+        got = scores.gsat_percentile("110", "國文x1.00 英文x1.00", 15)
+        self.assertAlmostEqual(got, 0.5, places=9)
+
+    def test_native_gsat_formula_does_not_fall_back_to_other_exam(self):
+        self.assertIsNone(
+            self.scores.gsat_percentile("114", "國文x1.00", 10)
+        )
+
 
 class TestParseMarks(unittest.TestCase):
     def test_score_band_uses_its_midpoint(self):
