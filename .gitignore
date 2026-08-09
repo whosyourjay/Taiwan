@@ -5,8 +5,7 @@ ceec/
 moe/
 star/
 tech/
-*.pdf
-*.txt
+uac/
 
 # Built by parse_*.py and rank_uac.py.
 *.tsv

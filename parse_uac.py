@@ -106,8 +106,8 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(os.path.join(HERE, "uac-*-cutoffs.pdf"))):
-        year = re.search(r"uac-(\d+)-", pdf).group(1)
+    for pdf in sorted(glob.glob(os.path.join(HERE, "uac", "*-cutoffs.pdf"))):
+        year = os.path.basename(pdf).split("-")[0]
         got = parse(pdf, year)
         print(f"{year}: {len(got)} 系組", file=sys.stderr)
         rows.extend(got)

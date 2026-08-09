@@ -213,7 +213,8 @@ active in 114.
 
     https://www.jctv.ntut.edu.tw/downloads/{year}/union42/{year}_up01.pdf
 
-Both are text PDFs.
+Both are text PDFs, saved by hand as `uac/{year}-cutoffs.pdf` and
+`tech/union42-{year}-cutoffs.pdf`.
 
 一般大學, 繁星推薦 (學測 + 在校學業成績全校排名百分比). 各校系錄取標準一覽表,
 split into 第一類至第七類學群 and 第八類學群 (medicine):
@@ -236,6 +237,8 @@ and OCR'd into `apply-cutoffs.tsv`. See Method.
 
 Downloaded inputs and auxiliary tables:
 
+- `uac/` and `tech/union42-*.pdf` — the two 分發 cutoff tables above, next to the
+  `pdftotext -layout` dump each parser caches on first run.
 - `admission-totals.tsv` — actual 108–114 admissions from the annual MOE
   Education Statistics tables A1-17 (editions 109–114) and A1-18 (edition 115).
   These counts supply denominator-only seats when rank evidence is unavailable.
@@ -253,7 +256,7 @@ Downloaded inputs and auxiliary tables:
 
 ## Rebuild
 
-    python3 parse_uac.py     # uac-*-cutoffs.pdf        -> uac-cutoffs.tsv
+    python3 parse_uac.py     # uac/*-cutoffs.pdf        -> uac-cutoffs.tsv
     python3 parse_tech.py    # tech/union42-*.pdf       -> tech-cutoffs.tsv
     python3 fetch_star.py 110 111   # -> star/,  ~2s and 340KB a year
     python3 parse_star.py           # star/*.pdf -> star-cutoffs.tsv, ~6 pages/s
@@ -266,6 +269,15 @@ Downloaded inputs and auxiliary tables:
 
 `rank_uac.py` pulls the 教育部 CSV through `gender.py` on first run. The 系組
 name normalisation both it and `gender.py` group by lives in `deptname.py`.
+
+Shared by the pipeline: `tsvio.py` reads and writes the tables, `deptname.py`
+normalises 系組 names, `gender.py` joins the 教育部 student counts, and
+`ceec_score.py` turns a 級分 bar into a share of that exam's takers.
+
+Off to the side, not wired into the rankings: `diagnose.py` prints each path's
+score for a fixed sample of departments, and `pool.py` / `fit_pool.py` /
+`plot_pool.py` fit the taker densities that would let percentiles from
+different exams compare without a linear bridge.
 
 `parse_apply.py` needs tesseract with traditional Chinese:
 
