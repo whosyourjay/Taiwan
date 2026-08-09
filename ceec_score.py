@@ -12,6 +12,8 @@ import bisect
 import collections
 import csv
 
+import parse_tcte
+
 
 SUBJECT_NAMES = {
     "國": "國文",
@@ -180,9 +182,16 @@ class ScoreDistributions:
             self.quantiles[key] = (percentiles, scores)
 
     @classmethod
-    def load(cls, path):
-        with open(path, encoding="utf-8") as f:
-            return cls(csv.DictReader(f, delimiter="\t"))
+    def load(cls, *paths):
+        rows = []
+        for path in paths:
+            with open(path, encoding="utf-8") as f:
+                rows.extend(csv.DictReader(f, delimiter="\t"))
+        return cls(rows)
+
+    def subjects(self, year, exam):
+        """Every subject name published for one exam in one year."""
+        return {s for y, e, s in self.quantiles if y == str(year) and e == exam}
 
     def subject_key(self, year, subject):
         """Map a UAC formula abbreviation to its CEEC exam and subject name."""
@@ -198,22 +207,34 @@ class ScoreDistributions:
         percentiles, scores = self.quantiles[key]
         return interpolate(percentiles, scores, percentile)
 
-    def formula_percentile(self, year, formula, cutoff):
-        """Return the equal-subject percentile matching a weighted total.
+    def tongce_key(self, year, subject, group):
+        """Map a 統測 formula subject to its distribution, given the row's 群(類).
 
-        Returns None when a formula contains an exam without a CEEC distribution,
-        currently only 術科.
+        國文 and 英文 are one paper nationally and 數學 is pooled over its four,
+        but each 專業科目 belongs to a 群, so that name has to be looked up.
         """
+        if subject.startswith("專業"):
+            subject = parse_tcte.professional_subject(
+                group, subject, self.subjects(year, "tongce")
+            )
+            if subject is None:
+                return None
+        key = (str(year), "tongce", subject)
+        return key if key in self.quantiles else None
+
+    def weighted_subjects(self, formula, key_of):
+        """Resolve `subjectxweight` tokens to distribution keys, or None."""
         subjects = []
         for token in formula.split():
             subject, weight = token.rsplit("x", 1)
-            key = self.subject_key(year, subject)
+            key = key_of(subject)
             if key is None:
                 return None
             subjects.append((key, float(weight)))
-        if not subjects:
-            return None
+        return subjects or None
 
+    def solve(self, subjects, cutoff):
+        """The equal-subject percentile whose quantiles sum to `cutoff`."""
         cutoff = float(cutoff)
         low, high = 0.0, 1.0
         for _ in range(40):
@@ -227,3 +248,21 @@ class ScoreDistributions:
             else:
                 high = percentile
         return (low + high) / 2
+
+    def formula_percentile(self, year, formula, cutoff):
+        """Return the equal-subject percentile matching a weighted total.
+
+        Returns None when a formula contains an exam without a CEEC distribution,
+        currently only 術科.
+        """
+        subjects = self.weighted_subjects(
+            formula, lambda s: self.subject_key(year, s)
+        )
+        return self.solve(subjects, cutoff) if subjects else None
+
+    def tongce_percentile(self, year, formula, cutoff, group):
+        """The same reading of a 統測 weighted total, against 統測's own takers."""
+        subjects = self.weighted_subjects(
+            formula, lambda s: self.tongce_key(year, s, group)
+        )
+        return self.solve(subjects, cutoff) if subjects else None

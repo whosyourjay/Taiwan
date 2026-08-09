@@ -28,6 +28,10 @@ ROW = re.compile(
     r"(\d+)\s+"  # 錄取人數
     r"([\d.]+)"  # 錄取總分數
 )
+# Every row is filed under its 群(類), printed at the head of the line. Which
+# 專業科目 papers a cutoff was scored on follows from it.
+GROUP = re.compile(r"^\s*\d{2}(\S+[群類])")
+WEIGHT = re.compile(r"(\S+?)\*(\d+\.\d+)")
 
 
 def full_school(school, following):
@@ -46,13 +50,18 @@ def full_school(school, following):
 def parse(pdf, year):
     rows = []
     lines = pdf_text(pdf).splitlines()
+    subject_group = ""
     for i, line in enumerate(lines):
         m = ROW.search(line)
+        head = GROUP.match(line[: m.start()] if m else line)
+        if head:
+            subject_group = head.group(1)
         if not m:
             continue
         code, group, school, dept, weights, quota, admitted, score = m.groups()
         school = full_school(school, lines[i + 1 : i + 4])
-        total_weight = sum(float(w) for w in re.findall(r"\*(\d+\.\d+)", weights))
+        pairs = WEIGHT.findall(weights)
+        total_weight = sum(float(w) for _, w in pairs)
         if not total_weight or not int(admitted):
             continue
         rows.append(
@@ -61,6 +70,8 @@ def parse(pdf, year):
                 "code": code,
                 "school": school,
                 "dept": dept,
+                "group": subject_group,
+                "subjects": " ".join(f"{s}x{w}" for s, w in pairs),
                 "weight_group": group,
                 "total_weight": round(total_weight, 2),
                 "seats": int(admitted),

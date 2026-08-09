@@ -65,13 +65,20 @@ def load(system, distributions=None):
         row["seats"] = int(row["seats"])
         row["norm"] = float(row["norm"])
         row["basis"] = row["norm"]
-        if system == "uac" and distributions is not None:
-            percentile = distributions.formula_percentile(
-                row["year"], row["subjects"], row["cutoff"]
+        if distributions is not None:
+            percentile = (
+                distributions.formula_percentile(
+                    row["year"], row["subjects"], row["cutoff"]
+                )
+                if system == "uac"
+                else distributions.tongce_percentile(
+                    row["year"], row["subjects"], row["cutoff"], row["group"]
+                )
             )
             if percentile is not None:
-                row["basis"] = percentile
                 row["ceec_percentile"] = percentile
+                if system == "uac":
+                    row["basis"] = percentile
         yield row
 
 
@@ -337,16 +344,20 @@ def build_rows():
     rankings then average away.
     """
     scores = os.path.join(HERE, "ceec-scores.tsv")
-    distributions = ceec_score.ScoreDistributions.load(scores)
+    distributions = ceec_score.ScoreDistributions.load(
+        scores, os.path.join(HERE, "tongce-scores.tsv")
+    )
     cohort = ceec_score.CohortPercentiles.load(scores)
     uac_rows = list(load("uac", distributions))
-    tech_rows = list(load("tech"))
+    tech_rows = list(load("tech", distributions))
     adjusted = sum("ceec_percentile" in row for row in uac_rows)
     fallbacks = ceec_score.calibrate_fallbacks(uac_rows)
     print(
         f"CEEC: adjusted {adjusted} of {len(uac_rows)} UAC rows;"
         f" calibrated {fallbacks} 術科 fallbacks"
     )
+    read = sum("ceec_percentile" in row for row in tech_rows)
+    print(f"統測: read {read} of {len(tech_rows)} 四技二專 rows against its takers")
     unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     extra = {}

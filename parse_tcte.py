@@ -44,6 +44,24 @@ def clean(text):
     return WRAPPED.sub(r"\2\3~\1", unicodedata.normalize("NFKC", text))
 
 
+# 專業科目(一) is set for a whole 群 where 專業科目(二) splits it into 類, and the
+# 商管 and 外語 群 share one 專業科目(一) paper. 四技二專聯合登記分發 names a
+# department's 群 at the 類 level throughout, so the coarser paper is looked up by
+# dropping the 類, then by this table.
+SHARED_FIRST_PAPER = {"商業與管理群": "商管外語群", "外語群": "商管外語群"}
+MATH = "數學"
+
+
+def professional_subject(group, part, known):
+    """Name the 專業科目 paper a 群(類) sits, or None if the tables lack it."""
+    stem = re.sub(r"(?<=群).+$", "", group)
+    for name in (group, stem, SHARED_FIRST_PAPER.get(stem, "")):
+        subject = f"{part}-{name}"
+        if name and subject in known:
+            return subject
+    return None
+
+
 def subject_of(part, tail):
     """Name the distribution a page reports, keyed by 群 where it varies.
 
@@ -86,6 +104,21 @@ def parse(path):
     return rows
 
 
+def pooled_maths(rows):
+    """Add a 數學 subject holding all four papers' candidates together.
+
+    四技二專聯合登記分發 writes 數學*1.00 in a formula without saying which of
+    數學(A)(B)(C)(S) the 群 sits, and the assignment is not in these tables. The
+    papers' medians span about twelve points, so pooling them costs a little
+    accuracy on one term of a five-subject weighted total.
+    """
+    totals = collections.Counter()
+    for year, subject, score, count in rows:
+        if subject.startswith(f"{MATH}("):
+            totals[(year, score)] += count
+    return [(year, MATH, score, count) for (year, score), count in totals.items()]
+
+
 def short(rows):
     """How many subjects came out with the wrong number of bands, and by how much.
 
@@ -109,7 +142,7 @@ def main(out_path):
         print(f"{os.path.basename(path):<24} {len(got):>6} rows, "
               f"{len(subjects):>2} subjects, {takers:>7,.0f} 國文 takers" + short(got),
               file=sys.stderr)
-        rows.extend(got)
+        rows.extend(got + pooled_maths(got))
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("year\texam\tsubject\tscore\tseats\n")
         for year, subject, score, count in rows:
