@@ -8,48 +8,42 @@ gap between the abilities they imply is the error to minimise.
 import collections
 import contextlib
 import math
-import os
 import sys
 
 import ceec_score
-import pool
 import rank_uac
+from lib.paths import path
+from pool import model
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 # 110 is the year every school was collected for, and the last year 分發入學 ran
 # purely on 指考 — from 111 its formulas mix in 學測 subjects.
 YEAR = "110"
 BINS = 3
 
 
+EXAMS = {"uac": "zhikao", "tech": "tongce", "star": "gsat", "apply": "gsat"}
+
+
 def exam_of(row):
     """Which exam pool a row's bar is a percentile inside."""
-    if row["year"] != YEAR:
-        return None
-    if row["path"] == "uac":
-        return "zhikao"
-    if row["path"] in ("star", "apply"):
-        return "gsat"
-    return None
+    return EXAMS.get(row["path"]) if row["year"] == YEAR else None
 
 
 def top_of(row):
     """Share of that exam's takers who cleared the bar."""
-    if row["path"] == "uac":
+    if row["path"] in ("uac", "tech"):
         percentile = row.get("ceec_percentile")
         return None if percentile is None else 1.0 - percentile
     if row["path"] == "apply":
         return row.get("cohort_top")
-    if row["path"] == "star":
-        # 繁星 ranks inside a school, so its bar is not a cohort percentile. The
-        # 檢定 gates are, but they are a floor rather than the margin.
-        return None
+    # 繁星 ranks inside a school, so its bar is not a cohort percentile. The
+    # 檢定 gates are, but they are a floor rather than the margin.
     return None
 
 
 def attach_apply_tops(rows):
     """Read each 個人申請 bar against the 學測 級分 distribution."""
-    cohort = ceec_score.CohortPercentiles.load(os.path.join(HERE, "ceec-scores.tsv"))
+    cohort = ceec_score.CohortPercentiles.load(path("ceec-scores.tsv"))
     got = 0
     for row in rows:
         if row["path"] != "apply":
@@ -77,16 +71,16 @@ NAMES = {"gsat": "學測", "zhikao": "指考/分科測驗", "tongce": "統測"}
 def plot_densities(pool_fit, height=16, width=66):
     """Overlaid step plot of every exam's taker density over cohort ability.
 
-    Each exam's takers are a different slice of the same cohort, so drawing them
-    on one axis is the whole point: where the curves separate is where a
-    percentile in one exam stops meaning what it means in the other.
+    Each curve is independent and they may overlap by any amount. Drawing them
+    on one axis shows where a percentile in one exam stops meaning what it means
+    in another; it says nothing about which students sat both.
     """
     exams = sorted(pool_fit.shares)
-    density = {e: pool_fit.shares[e] * pool_fit.bins for e in exams}
-    ceiling = math.ceil(max(max(d) for d in density.values()) * 10) / 10
+    density = {e: pool_fit.percentile_density(e) for e in exams}
+    ceiling = math.ceil(max(max(d) for d in density.values()) / 100) * 100
 
-    print("\ntaker density over cohort ability"
-          "   (1.00 = spread evenly across the cohort)")
+    print("\ntakers per cohort-percentile point"
+          "   (area under a curve = observed takers)")
     for row in range(height, 0, -1):
         level = ceiling * row / height
         line = ""
@@ -94,37 +88,43 @@ def plot_densities(pool_fit, height=16, width=66):
             k = min(pool_fit.bins - 1, col * pool_fit.bins // width)
             hit = [e for e in exams if density[e][k] >= level]
             line += "#" if len(hit) > 1 else (GLYPHS.get(hit[0], "*") if hit else " ")
-        print(f"  {level:4.2f} |{line}")
-    print("       +" + "-" * width)
-    ticks = "       "
+        print(f"  {level:5.0f} |{line}")
+    print("        +" + "-" * width)
+    ticks = "        "
     for mark in (0, 25, 50, 75, 100):
         cell = 1 + mark * (width - 1) // 100
-        ticks = ticks.ljust(7 + cell - len(str(mark)) // 2) + str(mark)
+        ticks = ticks.ljust(8 + cell - len(str(mark)) // 2) + str(mark)
     print(ticks)
     print(" " * 8 + "cohort ability percentile (100 = top)")
     print("  " + "   ".join(f"{GLYPHS.get(e, '*')} {NAMES.get(e, e)}" for e in exams)
-          + "   # both")
+          + "   # two or more")
     missing = [e for e in NAMES if e not in exams]
     if missing:
         print("  not fitted: " + ", ".join(NAMES[e] for e in missing)
               + " — no published score distribution collected yet")
 
 
-def report(pool_fit, sizes, observations, error):
-    print(f"\nfit on {len(observations)} matched departments, {YEAR}")
+def report(pool_fit, observations, error):
+    print(f"\nfit on {len(observations)} matched threshold pairs, {YEAR}")
+    pairs = collections.Counter(
+        tuple(sorted((left, right))) for left, _, right, _, _ in observations
+    )
+    print("  " + ", ".join(
+        f"{left}-{right}: {count}" for (left, right), count in sorted(pairs.items())
+    ))
     print(f"  taking percentiles as comparable: {naive_error(observations):5.2f} points")
-    print(f"  after placing both on the cohort:  {error:5.2f} points")
+    print(f"  after placing all on the cohort:   {error:5.2f} points")
 
-    print("\nhow each exam's takers sit on the cohort (1.00 = its fair share)")
-    header = "  " + f"{'exam':<9}{'takers':>9}" + "".join(
-        f"{f'{100*k//BINS}-{100*(k+1)//BINS}%':>10}" for k in range(BINS)
+    print("\nfitted takers in each cohort-ability bin")
+    header = "  " + f"{'exam':<9}{'observed':>11}" + "".join(
+        f"{f'{100*k//BINS}-{100*(k+1)//BINS}%':>12}" for k in range(BINS)
     )
     print(header)
     print("  " + "-" * (len(header) - 2))
     for exam in sorted(pool_fit.shares):
-        shares = pool_fit.shares[exam]
-        print("  " + f"{exam:<9}{sizes[exam]:>9,.0f}"
-              + "".join(f"{BINS * s:>10.2f}" for s in shares))
+        counts = pool_fit.bin_counts(exam)
+        print("  " + f"{exam:<9}{pool_fit.sizes[exam]:>11,.0f}"
+              + "".join(f"{n:>12,.0f}" for n in counts))
 
     plot_densities(pool_fit)
 
@@ -141,7 +141,7 @@ def observations():
     with contextlib.redirect_stdout(sys.stderr):
         rows = rank_uac.build_rows()
     resolved = attach_apply_tops(rows)
-    matched = pool.matched(rows, exam_of, top_of)
+    matched = model.matched(rows, exam_of, top_of)
     print(f"{resolved} 個人申請 bars read against the 學測 cohort", file=sys.stderr)
     return rows, matched
 
@@ -152,8 +152,9 @@ def main():
         print("no matched departments; nothing to fit", file=sys.stderr)
         return
     exams = sorted({e for o in matched for e in (o[0], o[2])})
-    fitted, error = pool.fit(matched, exams, bins=BINS)
-    report(fitted, taker_counts(), matched, error)
+    sizes = taker_counts()
+    fitted, error = model.fit(matched, exams, sizes, bins=BINS)
+    report(fitted, matched, error)
 
 
 def taker_counts():
@@ -161,14 +162,15 @@ def taker_counts():
     import csv
 
     totals = collections.defaultdict(lambda: collections.defaultdict(float))
-    path = os.path.join(HERE, "ceec-scores.tsv")
-    with open(path, encoding="utf-8") as f:
-        for row in csv.DictReader(f, delimiter="\t"):
-            if row["year"] != YEAR or "、" in row["subject"]:
-                continue
-            totals[row["exam"]][row["subject"]] += float(row["seats"])
-    return {"gsat": max(totals["gsat"].values()),
-            "zhikao": max(totals["zhikao"].values())}
+    for name in ("ceec-scores.tsv", "tongce-scores.tsv"):
+        with open(path(name), encoding="utf-8") as f:
+            for row in csv.DictReader(f, delimiter="\t"):
+                if row["year"] != YEAR or "、" in row["subject"]:
+                    continue
+                totals[row["exam"]][row["subject"]] += float(row["seats"])
+    # The most-sat subject is the closest thing to a headcount: everyone sits
+    # 國文, but the science and language papers split the cohort.
+    return {exam: max(subjects.values()) for exam, subjects in totals.items()}
 
 
 if __name__ == "__main__":

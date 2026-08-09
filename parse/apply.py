@@ -6,7 +6,7 @@ cutoff. It is still a real number on the 學測 15-級分 scale: 篩選順序一
 are applied in turn, each cutting to its own 倍率, so the last order that fired
 is the tightest bar and its 倍率 is what the intake was screened to.
 
-`norm` puts that bar on 0-1 the way parse_uac.py does, dividing by the maximum
+`norm` puts that bar on 0-1 the way `parse.uac` does, dividing by the maximum
 attainable under the subjects it names. `admitted` scales 招生名額 by the year's
 national fill rate, since these tables count places offered, not places taken.
 
@@ -28,9 +28,9 @@ import sys
 import numpy as np
 from PIL import Image
 
-import tsvio
+from lib import tsvio
+from lib.paths import path as repo_path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 
 N_ORDERS = 6
 GATE_0 = 4
@@ -295,7 +295,7 @@ def snap(ocr, candidates):
 
 
 def load_colleges():
-    with open(os.path.join(HERE, "apply", "colleges.tsv"), encoding="utf-8") as f:
+    with open(repo_path("apply", "colleges.tsv"), encoding="utf-8") as f:
         return {(r["year"], r["college_code"]): r["college"]
                 for r in csv.DictReader(f, delimiter="\t")}
 
@@ -303,11 +303,11 @@ def load_colleges():
 def load_names():
     """{school: {department names}} from the sources that ship as text."""
     out = {}
-    for path, col in ((os.path.join(HERE, "uac-cutoffs.tsv"), "dept"),
-                      (os.path.join(HERE, "star-cutoffs.tsv"), "dept")):
-        if not os.path.exists(path):
+    for source, col in ((repo_path("uac-cutoffs.tsv"), "dept"),
+                        (repo_path("star-cutoffs.tsv"), "dept")):
+        if not os.path.exists(source):
             continue
-        with open(path, encoding="utf-8") as f:
+        with open(source, encoding="utf-8") as f:
             for r in csv.DictReader(f, delimiter="\t"):
                 out.setdefault(r["college" if "college" in r else "school"],
                                set()).add(r[col])
@@ -316,7 +316,7 @@ def load_names():
 
 def main(out_path):
     colleges, names, rows = load_colleges(), load_names(), []
-    for png in sorted(glob.glob(os.path.join(HERE, "apply", "*.png"))):
+    for png in sorted(glob.glob(repo_path("apply", "*.png"))):
         got, skipped = parse(png, colleges, names)
         print(f"{os.path.basename(png)}: {len(got)} 校系, {skipped} non-data rows",
               file=sys.stderr)
@@ -326,4 +326,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "apply-cutoffs.tsv"))
+    main(repo_path("apply-cutoffs.tsv"))

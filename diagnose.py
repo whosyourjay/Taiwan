@@ -158,7 +158,7 @@ def main():
         print("  " + pad(path, 14)
               + f"{official:>10,}{observed:>10,}{gap:>10,}{100 * gap / official:>6.1f}%")
 
-    print("\nRun fit_pool.py for the taker density each exam draws from.")
+    print("\nRun python3 -m pool.fit for the taker density each exam draws from.")
 
 
 if __name__ == "__main__":

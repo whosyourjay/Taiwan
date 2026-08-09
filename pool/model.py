@@ -1,8 +1,8 @@
 """Put every exam's takers on one ability axis so their percentiles compare.
 
-A percentile inside one exam's takers says nothing next to another's: 學測 is sat
-by most of a 普通高中 cohort, 分科測驗 by the slice that did not already place,
-統測 by 技術型高中. Ranking first in one is not ranking first in another.
+A percentile inside one exam's takers says nothing next to another's. Each exam
+draws its own unknown population from the original cohort, and a student may sit
+any subset of the exams. Ranking first in one is not ranking first in another.
 
 Model each exam's takers as a density over ability, where ability is the
 percentile in the whole cohort and so is uniform by construction. Hold that
@@ -24,14 +24,17 @@ from scipy import optimize
 
 
 class AbilityPool:
-    """Per-exam shares of takers across equal-width bins of cohort ability.
+    """Independent exam PDFs across equal-width bins of cohort ability.
 
     `shares[exam]` sums to 1 over bins ordered from lowest ability to highest.
+    Multiplying it by `sizes[exam]` makes its integral equal the observed number
+    of students who took that exam.
     """
 
-    def __init__(self, shares, bins):
+    def __init__(self, shares, bins, sizes=None):
         self.shares = {e: np.asarray(s, dtype=float) for e, s in shares.items()}
         self.bins = bins
+        self.sizes = {e: float((sizes or {}).get(e, 1.0)) for e in self.shares}
 
     def abilities(self, exam, top_fractions):
         """Cohort percentile of each bar that its top fraction clears, 0-1.
@@ -51,10 +54,17 @@ class AbilityPool:
         """Cohort percentile of the bar that the top `top_fraction` clears."""
         return float(self.abilities(exam, [top_fraction])[0])
 
-    def participation(self, exam, sizes):
-        """Takers per bin as a fraction of the cohort slice that bin holds."""
-        cohort = sum(sizes.values()) / self.bins
-        return self.shares[exam] * sizes[exam] / cohort
+    def bin_counts(self, exam):
+        """Fitted number of this exam's takers in each ability bin."""
+        return self.shares[exam] * self.sizes[exam]
+
+    def density(self, exam):
+        """Takers per unit cohort fraction; its integral is the exam size."""
+        return self.bin_counts(exam) * self.bins
+
+    def percentile_density(self, exam):
+        """Takers per one cohort-percentile point, on an axis from 0 to 100."""
+        return self.density(exam) / 100.0
 
 
 def _shares_from(params, exams, bins):
@@ -71,10 +81,11 @@ def _shares_from(params, exams, bins):
 class _Problem:
     """Observations packed into arrays so a cost evaluation is a few vector ops."""
 
-    def __init__(self, observations, exams, bins):
+    def __init__(self, observations, exams, bins, sizes=None):
         index = {e: i for i, e in enumerate(exams)}
         self.exams = list(exams)
         self.bins = bins
+        self.sizes = sizes
         self.side = []
         for which in (0, 2):
             self.side.append((
@@ -98,7 +109,7 @@ class _Problem:
 
 def _cost(params, problem, smooth):
     pool = AbilityPool(_shares_from(params, problem.exams, problem.bins),
-                       problem.bins)
+                       problem.bins, problem.sizes)
     gaps = problem.gaps(pool)
     cost = float((problem.weights * gaps * gaps).sum()) / problem.weight_sum
     # Without this the fit is free to spike one bin, which fits a few matched
@@ -109,16 +120,21 @@ def _cost(params, problem, smooth):
     return cost
 
 
-def fit(observations, exams, bins=3, smooth=0.05, restarts=6, seed=20260809):
+def fit(observations, exams, sizes, bins=3, smooth=0.05, restarts=6,
+        seed=20260809):
     """Fit per-exam bin shares so matched departments agree on ability.
 
     `observations` are (exam_a, top_a, exam_b, top_b, weight), each a department
     admitting through two exams, with the share of each exam's takers that
-    cleared its bar. Returns (pool, mean_abs_disagreement).
+    cleared its bar. `sizes` fixes each independent PDF's integral. Returns
+    (pool, mean_abs_disagreement).
     """
     if not observations:
         raise ValueError("no matched departments to fit against")
-    problem = _Problem(observations, exams, bins)
+    missing = set(exams) - set(sizes)
+    if missing:
+        raise ValueError(f"missing observed taker counts: {sorted(missing)}")
+    problem = _Problem(observations, exams, bins, sizes)
     rng = np.random.default_rng(seed)
     best = None
     for attempt in range(restarts):
@@ -131,7 +147,7 @@ def fit(observations, exams, bins=3, smooth=0.05, restarts=6, seed=20260809):
         )
         if best is None or got.fun < best.fun:
             best = got
-    pool = AbilityPool(_shares_from(best.x, exams, bins), bins)
+    pool = AbilityPool(_shares_from(best.x, exams, bins), bins, sizes)
     return pool, residual(pool, observations)
 
 

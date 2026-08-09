@@ -4,6 +4,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+from lib.paths import path as repo_path
 
 BASE = "https://www.ceec.edu.tw"
 INDEXES = {
@@ -52,7 +53,7 @@ def data_links(page_url):
 
 def main():
     for exam, index_id in INDEXES.items():
-        outdir = os.path.join(os.path.dirname(__file__), "ceec", exam)
+        outdir = repo_path("ceec", exam)
         os.makedirs(outdir, exist_ok=True)
         for page_url, title in year_pages(index_id).items():
             year = re.match(r"(\d+)", title)
@@ -60,17 +61,17 @@ def main():
             for i, link in enumerate(data_links(page_url)):
                 name = urllib.parse.unquote(link.rsplit("/", 1)[-1])
                 name = re.sub(r"[^\w.一-鿿-]", "_", name)[-80:]
-                path = os.path.join(outdir, f"{year}-{i:02d}-{name}")
-                if os.path.exists(path):
+                target = os.path.join(outdir, f"{year}-{i:02d}-{name}")
+                if os.path.exists(target):
                     continue
                 try:
                     data = get(link)
                 except Exception as e:
                     print("FAIL", link, e)
                     continue
-                with open(path, "wb") as f:
+                with open(target, "wb") as f:
                     f.write(data)
-                print(f"{len(data):>9,}  {path}")
+                print(f"{len(data):>9,}  {target}")
 
 
 if __name__ == "__main__":

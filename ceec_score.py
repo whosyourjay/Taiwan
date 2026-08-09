@@ -12,7 +12,7 @@ import bisect
 import collections
 import csv
 
-import parse_tcte
+from parse import tcte
 
 
 SUBJECT_NAMES = {
@@ -214,7 +214,7 @@ class ScoreDistributions:
         but each 專業科目 belongs to a 群, so that name has to be looked up.
         """
         if subject.startswith("專業"):
-            subject = parse_tcte.professional_subject(
+            subject = tcte.professional_subject(
                 group, subject, self.subjects(year, "tongce")
             )
             if subject is None:

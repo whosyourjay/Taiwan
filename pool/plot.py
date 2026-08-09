@@ -1,11 +1,10 @@
 """Draw the fitted taker densities and the conversion they imply.
 
-Left: how thickly each exam draws from the cohort, against the flat line an exam
-sat by everyone would trace. Right: what a given position inside one exam's
-takers is worth on the cohort, which is the left panel integrated.
+Left: the independent count density for each exam; its area is the observed
+number of takers. Curves may overlap by any amount because no student-level
+overlap is modeled. Right: what a position inside one exam's takers is worth on
+the cohort, which is the corresponding left-panel curve integrated.
 """
-
-import os
 
 import matplotlib
 import numpy as np
@@ -13,11 +12,11 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (after the backend is fixed)
 
-import fit_pool  # noqa: E402
-import pool  # noqa: E402
+from lib.paths import path  # noqa: E402
+from pool import fit as pool_fit  # noqa: E402
+from pool import model  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "pool-densities.png")
+OUT = path("pool-densities.png")
 
 STYLE = {
     "gsat": ("#1f6feb", "學測 (GSAT)"),
@@ -27,12 +26,12 @@ STYLE = {
 FONTS = ["PingFang HK", "Heiti TC", "Arial Unicode MS", "Hiragino Sans GB"]
 
 
-def steps(shares, bins):
+def steps(values, bins):
     """Density as x, y arrays that draw as a staircase across the bins."""
     x, y = [], []
     for k in range(bins):
         x += [100.0 * k / bins, 100.0 * (k + 1) / bins]
-        y += [shares[k] * bins, shares[k] * bins]
+        y += [values[k], values[k]]
     return np.array(x), np.array(y)
 
 
@@ -44,17 +43,16 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
 
     for exam in exams:
         colour, label = STYLE.get(exam, ("#57606a", exam))
-        x, y = steps(fitted.shares[exam], fitted.bins)
+        x, y = steps(fitted.percentile_density(exam), fitted.bins)
         left.plot(x, y, color=colour, linewidth=2.4,
                   label=f"{label}  ({sizes.get(exam, 0):,.0f} takers)")
-        left.fill_between(x, 1.0, y, color=colour, alpha=0.13)
-    left.axhline(1.0, color="#57606a", linewidth=1.0, linestyle="--")
+        left.fill_between(x, 0.0, y, color=colour, alpha=0.13)
     left.set_xlim(0, 100)
-    left.set_ylim(0, max(1.4, max((fitted.shares[e] * fitted.bins).max()
-                                  for e in exams) * 1.18))
+    left.set_ylim(0, max(fitted.percentile_density(e).max()
+                         for e in exams) * 1.18)
     left.set_xlabel("cohort ability percentile  (100 = top)")
-    left.set_ylabel("taker density  (1.0 = the exam's fair share)")
-    left.set_title(f"Who sits each exam, {year}")
+    left.set_ylabel("test takers per cohort-percentile point")
+    left.set_title(f"Independent fitted test-pool densities, {year}")
     left.legend(loc="upper left", frameon=False, fontsize=9)
     left.grid(alpha=0.18)
 
@@ -75,7 +73,7 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
 
     figure.suptitle(
         f"Taiwanese admission exams on one cohort axis — "
-        f"{len(observations):,} matched departments, "
+        f"{len(observations):,} matched threshold pairs, "
         f"disagreement {naive:.1f} → {error:.1f} percentile points",
         fontsize=11,
     )
@@ -85,11 +83,12 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
 
 
 def main():
-    rows, observations = fit_pool.observations()
+    _, observations = pool_fit.observations()
     exams = sorted({e for o in observations for e in (o[0], o[2])})
-    fitted, error = pool.fit(observations, exams, bins=fit_pool.BINS)
-    written = draw(fitted, fit_pool.taker_counts(), observations, error,
-                   fit_pool.naive_error(observations), fit_pool.YEAR)
+    sizes = pool_fit.taker_counts()
+    fitted, error = model.fit(observations, exams, sizes, bins=pool_fit.BINS)
+    written = draw(fitted, sizes, observations, error,
+                   pool_fit.naive_error(observations), pool_fit.YEAR)
     print(f"wrote {written}")
 
 

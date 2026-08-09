@@ -1,6 +1,7 @@
 import unittest
 
-from parse_uac import ART_MAX, max_score
+from lib.paths import path
+from parse.uac import ART_MAX, max_score
 
 
 class TestMaxScore(unittest.TestCase):
@@ -20,10 +21,10 @@ class TestMaxScore(unittest.TestCase):
         import csv
         import os
 
-        path = os.path.join(os.path.dirname(__file__), "uac-cutoffs.tsv")
-        if not os.path.exists(path):
+        source = path("uac-cutoffs.tsv")
+        if not os.path.exists(source):
             self.skipTest("uac-cutoffs.tsv not built")
-        with open(path, encoding="utf-8") as f:
+        with open(source, encoding="utf-8") as f:
             worst = max(float(r["norm"]) for r in csv.DictReader(f, delimiter="\t"))
         self.assertLessEqual(worst, 1.0, "a cutoff exceeds its formula's maximum")
 

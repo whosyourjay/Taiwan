@@ -56,15 +56,6 @@ class TestCurve(unittest.TestCase):
             self.assertAlmostEqual(got[0], 25.0)
             self.assertAlmostEqual(got[1], 75.0)
 
-    def test_anonymous_floor_seats_only_change_the_denominator(self):
-        data = rows([(0.5, 10), (0.9, 10)])
-        rank_uac.curve(
-            data, "norm", "pct", lambda r: r["year"], {"114": 20}
-        )
-        got = {r["norm"]: r["pct"] for r in data}
-        self.assertAlmostEqual(got[0.5], 62.5)
-        self.assertAlmostEqual(got[0.9], 87.5)
-
     def test_fuzz_is_uniform_and_monotone(self):
         rng = random.Random(0)
         for _ in range(500):
@@ -109,14 +100,14 @@ class TestAggregate(unittest.TestCase):
         self.assertAlmostEqual(got["seats_avg"], 20.0)
 
 
-class TestAnonymousSeats(unittest.TestCase):
+class TestCoverageGaps(unittest.TestCase):
     def test_official_totals_cover_every_modeled_path_and_year(self):
         got = set(rank_uac.load_admission_totals())
         years = {str(year) for year in range(108, 115)}
         paths = {"uac", "tech", "star", "apply", "tech_select"}
         self.assertEqual(got, {(year, path) for year in years for path in paths})
 
-    def test_unprocessed_and_dropped_seats_remain_in_national_denominator(self):
+    def test_unprocessed_and_dropped_seats_remain_in_coverage_gap(self):
         data = rows([(0.5, 7)])
         data[0]["path"] = "apply"
         totals = {
@@ -124,8 +115,8 @@ class TestAnonymousSeats(unittest.TestCase):
             ("114", "star"): 5,
             ("114", "tech_select"): 20,
         }
-        floors, residual = rank_uac.anonymous_seats(data, totals)
-        self.assertEqual(floors, {"114": 28})
+        gaps, residual = rank_uac.coverage_gaps(data, totals)
+        self.assertEqual(gaps, {"114": 28})
         self.assertEqual(residual[("114", "apply")], 3)
         self.assertEqual(residual[("114", "star")], 5)
         self.assertEqual(residual[("114", "tech_select")], 20)

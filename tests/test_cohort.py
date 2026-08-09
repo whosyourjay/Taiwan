@@ -1,17 +1,16 @@
 """Tests for the 學測 cohort percentiles and the paths that depend on them."""
 
 import collections
-import os
 import random
 import unittest
 
 import ceec_score
 import rank_uac
-import tsvio
+from lib import tsvio
+from lib.paths import path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SCORES = os.path.join(HERE, "ceec-scores.tsv")
-STAR = os.path.join(HERE, "star-cutoffs.tsv")
+SCORES = path("ceec-scores.tsv")
+STAR = path("star-cutoffs.tsv")
 
 # 頂/前/均/後/底標 is the 級分 of the candidate at this percentile from the bottom.
 BANDS = [("頂標", 88), ("前標", 75), ("均標", 50), ("後標", 25), ("底標", 12)]

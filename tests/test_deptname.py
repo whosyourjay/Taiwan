@@ -4,8 +4,8 @@ import unittest
 
 import rank_uac
 from deptname import normalize
+from lib.paths import path
 
-HERE = os.path.dirname(__file__)
 
 CASES = {
     # Nothing to strip.
@@ -43,10 +43,10 @@ PARTS = ["資訊工程", "學系", "系", "科", "學士班", "學位學程", "�
 
 def dept_names():
     for name in rank_uac.SOURCES.values():
-        path = os.path.join(HERE, name)
-        if not os.path.exists(path):
+        source = path(name)
+        if not os.path.exists(source):
             continue
-        with open(path, encoding="utf-8") as f:
+        with open(source, encoding="utf-8") as f:
             col = f.readline().rstrip("\n").split("\t").index("dept")
             for line in f:
                 yield line.rstrip("\n").split("\t")[col]

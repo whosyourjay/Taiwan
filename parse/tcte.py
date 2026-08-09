@@ -8,7 +8,7 @@ by everyone; 數學 splits into four papers and 專業科目(一)(二) into one 
 Absentees (缺考) are reported apart from the distribution and are left out, which
 is the denominator the published percentages already use.
 
-Output columns match parse_ceec.py: year exam subject score seats.
+Output columns match `parse.ceec`: year exam subject score seats.
 """
 
 import collections
@@ -18,10 +18,10 @@ import re
 import sys
 import unicodedata
 
-from parse_ceec import mark_midpoint
-from parse_uac import pdf_text
+from lib.paths import path as repo_path
+from parse.ceec import mark_midpoint
+from parse.uac import pdf_text
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 SCORES = "tech/tcte-*-scores.pdf"
 
 # pdftotext -layout leaves the year floating away from the rest of the heading,
@@ -135,11 +135,11 @@ def short(rows):
 
 def main(out_path):
     rows = []
-    for path in sorted(glob.glob(os.path.join(HERE, SCORES))):
-        got = parse(path)
+    for source in sorted(glob.glob(repo_path(SCORES))):
+        got = parse(source)
         subjects = {r[1] for r in got}
         takers = sum(r[3] for r in got if r[1] == "國文")
-        print(f"{os.path.basename(path):<24} {len(got):>6} rows, "
+        print(f"{os.path.basename(source):<24} {len(got):>6} rows, "
               f"{len(subjects):>2} subjects, {takers:>7,.0f} 國文 takers" + short(got),
               file=sys.stderr)
         rows.extend(got + pooled_maths(got))
@@ -151,4 +151,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "tongce-scores.tsv"))
+    main(repo_path("tongce-scores.tsv"))

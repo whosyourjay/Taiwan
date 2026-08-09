@@ -1,0 +1,6 @@
+matplotlib
+numpy
+pdfplumber
+Pillow
+scipy
+xlrd

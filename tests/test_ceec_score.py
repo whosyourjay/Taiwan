@@ -1,7 +1,7 @@
 import unittest
 
 from ceec_score import ScoreDistributions, calibrate_fallbacks
-from parse_ceec import mark_midpoint
+from parse.ceec import mark_midpoint
 
 
 def score_rows(year, exam, subject, scores):

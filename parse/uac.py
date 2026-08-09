@@ -12,9 +12,8 @@ import re
 import subprocess
 import sys
 
-import tsvio
-
-HERE = os.path.dirname(os.path.abspath(__file__))
+from lib import tsvio
+from lib.paths import path
 
 # 指考 (through 110) uses 100 points; UAC academic scores from 111 use 60 levels.
 def max_per_subject(year):
@@ -106,7 +105,7 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(os.path.join(HERE, "uac", "*-cutoffs.pdf"))):
+    for pdf in sorted(glob.glob(path("uac", "*-cutoffs.pdf"))):
         year = os.path.basename(pdf).split("-")[0]
         got = parse(pdf, year)
         print(f"{year}: {len(got)} 系組", file=sys.stderr)
@@ -116,4 +115,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "uac-cutoffs.tsv"))
+    main(path("uac-cutoffs.tsv"))

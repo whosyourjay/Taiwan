@@ -18,9 +18,9 @@ onto the 分發入學 axis. The two partially collected 學測 paths are then ma
 onto that fixed admitted-seat axis.
 
 Scores average all available rank evidence (108-114) within each admission path,
-then average paths by their annual admitted seats. Seats with no cutoff data are
-counted in the intake totals but take no position on the axis. Entities that have
-closed or merged are kept, with `last_year` saying when they were last seen.
+then average paths by their annual admitted seats. Official totals report missing
+coverage but do not affect scores. Entities that closed or merged remain in the
+output, with `last_year` saying when they were last seen.
 """
 
 import collections
@@ -29,7 +29,7 @@ import os
 import ceec_score
 import deptname
 import gender
-import tsvio
+from lib import tsvio
 
 HERE = os.path.dirname(__file__)
 PATHS = ("uac", "tech", "star", "apply")
@@ -167,40 +167,29 @@ def wmean(rows, field):
     return sum(r[field] * r["seats"] for r in rows) / seats if seats else 0.0
 
 
-def curve(rows, source, target, key, floor_seats=None):
+def curve(rows, source, target, key):
     """Set `target` to where `source` falls among the seats it competes with, 0-100.
 
     Keying on year and admission path curves each route against its own field,
     which makes the bridge fit on comparable scales. Keying on year alone
     curves the merged pool once both systems are on one axis. Rows sharing a
-    value share the midpoint of the seats they span. Optional `floor_seats`
-    count in each group's denominator and below every ranked row, but are never
-    assigned a score themselves.
+    value share the midpoint of the seats they span.
     """
-    floor_seats = floor_seats or {}
     groups = collections.defaultdict(list)
     for row in rows:
         groups[key(row)].append(row)
-    for group_key, group in groups.items():
+    for group in groups.values():
         values, percentiles = ceec_score.weighted_midpoints(group, source)
         percentile_of = dict(zip(values, percentiles))
-        ranked = sum(row["seats"] for row in group)
-        floor = floor_seats.get(group_key, 0)
-        if floor < 0:
-            raise ValueError(f"negative floor seats for {group_key}: {floor}")
-        total = ranked + floor
         for row in group:
-            row[target] = 100.0 * (
-                floor + ranked * percentile_of[row[source]]
-            ) / total
+            row[target] = 100.0 * percentile_of[row[source]]
 
 
-def anonymous_seats(rows, totals):
-    """Return unranked official seats by year and by (year, path).
+def coverage_gaps(rows, totals):
+    """Return unscored official seats by year and by (year, path).
 
     Only rows that survive parsing and joining are `observed`. Thus a rejected
-    row automatically remains represented in the national denominator without
-    supplying evidence about any school or department's rank.
+    row remains visible in the coverage audit without supplying rank evidence.
     """
     observed = collections.Counter()
     for row in rows:
@@ -414,20 +403,18 @@ def build_rows():
         for row in path_rows:
             row["rank_basis"] = intercept + slope * row["pct"]
 
-    # Seats we hold no cutoff for are counted and reported, but they do not
-    # place themselves anywhere on the axis: an uncollected school is missing,
-    # not weak. They belong to the intake totals, not to the score.
-    floors, residual = anonymous_seats(rows, load_admission_totals())
+    # Report missing coverage without assigning those seats a rank.
+    gaps, residual = coverage_gaps(rows, load_admission_totals())
     curve(rows, "rank_basis", "score", lambda r: r["year"])
     by_path = collections.Counter()
     for (_, path), missing in residual.items():
         by_path[path] += missing
     print(
-        "anonymous seats: "
-        + ", ".join(f"{year}={floors[year]:,}" for year in sorted(floors))
+        "coverage gaps: "
+        + ", ".join(f"{year}={gaps[year]:,}" for year in sorted(gaps))
     )
     print(
-        "anonymous by path: "
+        "coverage gaps by path: "
         + ", ".join(
             f"{path}={by_path[path]:,}"
             for path in ("uac", "tech", "star", "apply", "tech_select")

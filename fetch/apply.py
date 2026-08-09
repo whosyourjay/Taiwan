@@ -4,17 +4,17 @@ CAC publishes this table only as a PNG per college, one tall image holding the
 whole school. There is no index page, but the 個人申請 and 繁星 archives share
 CAC's 3-digit college codes, so the 繁星 list resolves a code to a name.
 
-Writes apply/colleges.tsv so parse_apply.py needs no network.
+Writes apply/colleges.tsv so `python -m parse.apply` needs no network.
 """
 
 import os
 import sys
 import time
 
-from fetch_star import WANT, colleges, get
+from fetch.star import WANT, colleges, get
+from lib.paths import path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "apply")
+OUT = path("apply")
 
 BASE = "https://www.cac.edu.tw/cacportal/apply_his_report"
 

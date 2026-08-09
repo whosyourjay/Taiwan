@@ -1,7 +1,7 @@
 """Parse 四技二專聯合登記分發 minimum-admission-score PDFs into a TSV.
 
 The 統測 counts 國文/英文/數學/專業(一)/專業(二), each out of 100, so a 系科組's
-maximum is 100 * sum(weights) and `norm` is built exactly as in parse_uac.py.
+maximum is 100 * sum(weights) and `norm` is built exactly as in `parse.uac`.
 
 A department recruits from several 群(類)別 with different weight combinations,
 so it appears on several rows; ranking aggregates them by admitted headcount.
@@ -12,10 +12,9 @@ import os
 import re
 import sys
 
-import tsvio
-from parse_uac import pdf_text
-
-HERE = os.path.dirname(os.path.abspath(__file__))
+from lib import tsvio
+from lib.paths import path
+from parse.uac import pdf_text
 
 MAX_PER_SUBJECT = 100.0
 ROW = re.compile(
@@ -84,7 +83,7 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    pattern = os.path.join(HERE, "tech", "union42-*.pdf")
+    pattern = path("tech", "union42-*.pdf")
     for pdf in sorted(glob.glob(pattern)):
         year = re.search(r"union42-(\d+)-", pdf).group(1)
         got = parse(pdf, year)
@@ -95,4 +94,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "tech-cutoffs.tsv"))
+    main(path("tech-cutoffs.tsv"))

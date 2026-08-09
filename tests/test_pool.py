@@ -1,10 +1,12 @@
 """Tests for the cohort-ability model."""
 
 import unittest
+from unittest import mock
 
 import numpy as np
 
-import pool
+from pool import model as pool
+from pool import plot as pool_plot
 
 
 class TestAbility(unittest.TestCase):
@@ -30,6 +32,25 @@ class TestAbility(unittest.TestCase):
         flat = pool.AbilityPool({"e": [0.5, 0.5]}, 2)
         self.assertAlmostEqual(flat.ability("e", -1.0), 1.0)
         self.assertAlmostEqual(flat.ability("e", 2.0), 0.0)
+
+    def test_random_pdfs_integrate_to_observed_takers(self):
+        rng = np.random.default_rng(20260809)
+        for _ in range(100):
+            shares = rng.dirichlet(np.ones(3))
+            size = float(rng.integers(1, 200_000))
+            fitted = pool.AbilityPool({"e": shares}, 3, {"e": size})
+            self.assertAlmostEqual(float(fitted.bin_counts("e").sum()), size)
+            area = float(fitted.percentile_density("e").sum()) * 100 / 3
+            self.assertAlmostEqual(area, size)
+
+    def test_exam_size_scales_only_its_independent_pdf(self):
+        shares = {"a": [0.2, 0.3, 0.5], "b": [0.4, 0.4, 0.2]}
+        smaller = pool.AbilityPool(shares, 3, {"a": 10, "b": 40})
+        larger = pool.AbilityPool(shares, 3, {"a": 100, "b": 40})
+        self.assertAlmostEqual(smaller.ability("a", 0.25),
+                               larger.ability("a", 0.25))
+        np.testing.assert_allclose(smaller.density("b"), larger.density("b"))
+        np.testing.assert_allclose(larger.density("a"), 10 * smaller.density("a"))
 
 
 class TestMatched(unittest.TestCase):
@@ -91,8 +112,9 @@ class TestFit(unittest.TestCase):
         observations = self.observations_from(truth, bars)
         self.assertLess(pool.residual(truth, observations), 0.01)
 
-        fitted, error = pool.fit(observations, ["a", "b"], bins=3, smooth=0.0,
-                                 restarts=4)
+        sizes = {"a": 90, "b": 40}
+        fitted, error = pool.fit(observations, ["a", "b"], sizes, bins=3,
+                                 smooth=0.0, restarts=4)
         self.assertLess(error, 0.6, "fit should reproduce agreeing bars")
         for top in (0.05, 0.25, 0.5):
             self.assertAlmostEqual(fitted.ability("a", top),
@@ -115,14 +137,40 @@ class TestFit(unittest.TestCase):
             pool.AbilityPool({"a": [0.4, 0.3, 0.3], "b": [0.2, 0.3, 0.5]}, 3),
             [0.05, 0.2, 0.5],
         )
-        fitted, _ = pool.fit(observations, ["a", "b"], bins=3, restarts=2)
+        fitted, _ = pool.fit(observations, ["a", "b"], {"a": 90, "b": 40},
+                             bins=3, restarts=2)
         for shares in fitted.shares.values():
             self.assertAlmostEqual(float(shares.sum()), 1.0, places=9)
             self.assertTrue((shares > 0).all())
 
     def test_no_observations_is_an_error(self):
         with self.assertRaises(ValueError):
-            pool.fit([], ["a", "b"])
+            pool.fit([], ["a", "b"], {"a": 90, "b": 40})
+
+    def test_requires_observed_count_for_every_exam(self):
+        observations = [("a", 0.1, "b", 0.2, 1.0)]
+        with self.assertRaisesRegex(ValueError, "missing observed taker counts"):
+            pool.fit(observations, ["a", "b"], {"a": 90})
+
+
+class TestPlotCommand(unittest.TestCase):
+    def test_main_wires_observations_counts_fit_and_draw(self):
+        observations = [("a", 0.1, "b", 0.2, 1.0)]
+        fitted = pool.AbilityPool({"a": [0.5, 0.5], "b": [0.5, 0.5]}, 2)
+        with mock.patch.object(pool_plot.pool_fit, "observations",
+                               return_value=([], observations)):
+            with mock.patch.object(pool_plot.pool_fit, "taker_counts",
+                                   return_value={"a": 10, "b": 20}):
+                with mock.patch.object(pool_plot.model, "fit",
+                                       return_value=(fitted, 1.5)) as fit:
+                    with mock.patch.object(pool_plot, "draw",
+                                           return_value="figure.png") as draw:
+                        pool_plot.main()
+        fit.assert_called_once_with(
+            observations, ["a", "b"], {"a": 10, "b": 20},
+            bins=pool_plot.pool_fit.BINS,
+        )
+        draw.assert_called_once()
 
 
 if __name__ == "__main__":

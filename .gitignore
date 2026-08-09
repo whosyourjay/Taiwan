@@ -1,4 +1,4 @@
-# Downloaded sources. The fetch_*.py scripts re-download; the UAC and 統測 PDFs
+# Downloaded sources. Modules under fetch/ re-download; the UAC and 統測 PDFs
 # come from the URLs in README.md.
 apply/
 ceec/
@@ -7,7 +7,7 @@ star/
 tech/
 uac/
 
-# Built by parse_*.py and rank_uac.py.
+# Built by modules under parse/ and by rank_uac.py.
 *.tsv
 !admission-totals.tsv
 
@@ -16,5 +16,5 @@ __pycache__/
 .DS_Store
 *.swp
 
-# Built by plot_pool.py.
+# Built by python3 -m pool.plot.
 pool-densities.png

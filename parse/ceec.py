@@ -25,7 +25,8 @@ import os
 import re
 import sys
 
-HERE = os.path.dirname(__file__)
+from lib.paths import path as repo_path
+
 GRADES = "ceec/zhikao/*各科級分人數百分比累計表*.xls"
 MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
 # CEEC renamed these mid-series (分布表 -> 百分比累計表) and some years ship the
@@ -130,11 +131,12 @@ def parse(path):
 def main(out_path):
     rows = []
     for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO):
-        for path in sorted(glob.glob(os.path.join(HERE, pattern))):
-            got = parse(path)
+        for source in sorted(glob.glob(repo_path(pattern))):
+            got = parse(source)
             if got:
                 subs = len({r[2] for r in got})
-                print(f"{os.path.basename(path)[:44]:<46} {len(got):>5} rows, {subs} subjects",
+                print(f"{os.path.basename(source)[:44]:<46} {len(got):>5} rows, "
+                      f"{subs} subjects",
                       file=sys.stderr)
                 rows.extend(got)
     with open(out_path, "w", encoding="utf-8") as f:
@@ -145,4 +147,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "ceec-scores.tsv"))
+    main(repo_path("ceec-scores.tsv"))

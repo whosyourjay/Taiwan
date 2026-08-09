@@ -14,9 +14,9 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from lib.paths import path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "star")
+OUT = path("star")
 
 BASE = "https://www.cac.edu.tw/cacportal/star_his_report"
 GROUPS = ("one2seven", "eight")

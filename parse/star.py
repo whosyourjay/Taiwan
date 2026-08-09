@@ -20,9 +20,8 @@ import sys
 
 import pdfplumber
 
-import tsvio
-
-HERE = os.path.dirname(os.path.abspath(__file__))
+from lib import tsvio
+from lib.paths import path
 
 # 檢定 subject column, then the 比序 item and its four value columns.
 GATE_SUBJECTS = ("國文", "英文", "數學", "數學A", "數學B", "社會", "自然", "英聽")
@@ -207,7 +206,7 @@ def parse(path):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(os.path.join(HERE, "star", "*.pdf"))):
+    for pdf in sorted(glob.glob(path("star", "*.pdf"))):
         got = parse(pdf)
         print(f"{os.path.basename(pdf)}: {len(got)} 校系", file=sys.stderr)
         rows.extend(got)
@@ -216,4 +215,4 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(os.path.join(HERE, "star-cutoffs.tsv"))
+    main(path("star-cutoffs.tsv"))

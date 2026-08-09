@@ -5,8 +5,9 @@ import re
 import subprocess
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-TSV = os.path.join(HERE, "star-cutoffs.tsv")
+from lib.paths import path
+
+TSV = path("star-cutoffs.tsv")
 
 # Values read off the PDFs by eye.
 SPOT = {
@@ -51,7 +52,7 @@ class TestStar(unittest.TestCase):
 
     def test_one_row_per_dept_in_pdf(self):
         """Every 校系代碼 line in the raw text becomes exactly one row."""
-        for pdf in sorted(glob.glob(os.path.join(HERE, "star", "*.pdf"))):
+        for pdf in sorted(glob.glob(path("star", "*.pdf"))):
             year, code, group = os.path.basename(pdf)[:-4].split("-")
             txt = subprocess.run(["pdftotext", "-layout", pdf, "-"],
                                  capture_output=True, text=True).stdout
