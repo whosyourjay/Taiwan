@@ -1,4 +1,5 @@
-Total population of students in a year (Taiwan annual birth data)
+A lot of tsv landing at top level
+Total population of students in a year. Let's just use admitted student body and we can as a super-final step add a chunk at the bottom for people who don't go to college.
 學測 for all other years
 
 Fix art ranking. E.g. rank schools on individual exams somehow, or rank by groups that share the same set of exams.
@@ -6,11 +7,6 @@ Fix art ranking. E.g. rank schools on individual exams somehow, or rank by group
 - This should be handled year-by-year. We should build an estimate of student percentile across the 2-4 test types we're using, then assign a final percentile to the admit track. Then when we pool across years, tracks, or departments we take a weighted average.
 - Parameters shared across year and track in the bridging formula should be the only connection between years
 
-High school rank
-Xuece individual parts
-Xuece overall score for different subsets
-Zhikao
-Tongce score
 其他管道 - Mixture of IMO/IOI and sports
   Quantify the fractions here
   特殊選才
