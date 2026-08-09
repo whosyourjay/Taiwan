@@ -52,24 +52,15 @@ def midranks(counts):
     return values, percentiles
 
 
-def interpolate(xs, ys, x, extrapolate=False):
-    """Linear interpolation, held constant beyond the observed endpoints.
-
-    With `extrapolate`, the end segments continue instead of flattening.
-    """
+def interpolate(xs, ys, x):
+    """Linear interpolation, held constant beyond the observed endpoints."""
     i = bisect.bisect_right(xs, x)
     if i == 0:
-        if not extrapolate:
-            return ys[0]
-        i = 1
-    elif i == len(xs):
-        if not extrapolate:
-            return ys[-1]
-        i = len(xs) - 1
+        return ys[0]
+    if i == len(xs):
+        return ys[-1]
     x0, x1 = xs[i - 1], xs[i]
     y0, y1 = ys[i - 1], ys[i]
-    if x1 == x0:
-        return y0
     return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
 
 

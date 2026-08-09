@@ -157,20 +157,17 @@ class TestAbsolutePathsIgnoreTheSample(unittest.TestCase):
 
 
 class TestInterpolateEnds(unittest.TestCase):
-    def test_holds_flat_by_default_and_continues_when_asked(self):
+    def test_holds_flat_beyond_the_data(self):
         xs, ys = [0.0, 10.0], [0.0, 100.0]
         self.assertAlmostEqual(ceec_score.interpolate(xs, ys, 20.0), 100.0)
-        self.assertAlmostEqual(
-            ceec_score.interpolate(xs, ys, 20.0, extrapolate=True), 200.0
-        )
-        self.assertAlmostEqual(
-            ceec_score.interpolate(xs, ys, -5.0, extrapolate=True), -50.0
-        )
+        self.assertAlmostEqual(ceec_score.interpolate(xs, ys, -5.0), 0.0)
+        self.assertAlmostEqual(ceec_score.interpolate(xs, ys, 2.5), 25.0)
 
-    def test_repeated_x_does_not_divide_by_zero(self):
+    def test_tied_x_takes_the_last_of_the_tie(self):
+        # bisect_right lands past the whole run, so no zero-width segment arises.
         self.assertAlmostEqual(
-            ceec_score.interpolate([5.0, 5.0], [1.0, 2.0], 9.0, extrapolate=True),
-            1.0,
+            ceec_score.interpolate([0.0, 5.0, 5.0, 9.0], [0.0, 1.0, 2.0, 3.0], 5.0),
+            2.0,
         )
 
 

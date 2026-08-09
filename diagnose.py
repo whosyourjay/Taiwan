@@ -18,7 +18,6 @@ import contextlib
 import sys
 import unicodedata
 
-import ceec_score
 import rank_uac
 
 PATHS = ["uac", "tech", "star", "apply"]
@@ -35,9 +34,9 @@ EXAMS = {
     "star": "學測 (在校排名)",
     "apply": "學測 (篩選級分)",
 }
-# 繁星 and 個人申請 were only collected for 110-111, so this is the latest year
-# all four paths can be compared on the same curve.
-SCALE_YEAR = "111"
+# The year every school was collected for. Other years hold 8 schools of 繁星
+# and 個人申請, too narrow a slice to read an endpoint off.
+SCALE_YEAR = "110"
 
 SCHOOLS = [
     ("國立臺灣大學", "comprehensive flagship"),
@@ -75,30 +74,22 @@ def by_path(rows):
     return out
 
 
-def at(pairs, x):
-    """Interpolate y at x, continuing along the end segments beyond the data."""
-    return ceec_score.interpolate([p[0] for p in pairs], [p[1] for p in pairs],
-                                  x, extrapolate=True)
-
-
 def scale_endpoints(rows, year, field):
-    """Where each path's own 0-100 curve lands on `field`, that year.
+    """The span of each path's input that year, and where it lands on `field`.
 
-    `pct` is a path's position among the seats it competes with, so it spans
-    0-100 by construction. What differs is how much of the national axis that
-    span is mapped onto: a path bridged with a shallow slope is compressed into
-    a narrow band, and cannot separate its departments however well it ranks
-    them internally.
+    A curved path spans 0-100 by construction; an absolute one spans whatever
+    the cohort gave it, so both ends are reported as observed rather than
+    extrapolated to a nominal 0 and 100. What the comparison shows is how much
+    of the national axis each exam is mapped onto.
     """
     out = {}
     for path in PATHS:
         group = [r for r in rows if r["path"] == path and r["year"] == year]
-        merged = collections.defaultdict(list)
-        for row in group:
-            merged[row["pct"]].append(row[field])
-        pairs = sorted((p, sum(s) / len(s)) for p, s in merged.items())
-        if len(pairs) >= 2:
-            out[path] = (at(pairs, 0.0), at(pairs, 100.0))
+        if len(group) < 2:
+            continue
+        low = min(group, key=lambda r: r["pct"])
+        high = max(group, key=lambda r: r["pct"])
+        out[path] = (low["pct"], high["pct"], low[field], high[field])
     return out
 
 
@@ -174,20 +165,19 @@ def main():
     floored = scale_endpoints(rows, SCALE_YEAR, "score")
     ranked = scale_endpoints(rows, SCALE_YEAR, "score_ranked")
 
-    print(f"\nExam scale -> final score, year {SCALE_YEAR}"
-          " (the latest all four paths cover)")
+    print(f"\nExam scale -> final score, year {SCALE_YEAR}")
     print("  " + pad("exam", 20) + pad("path", 8)
-          + f"{'ranked seats only':>22}{'unranked as floor':>22}")
-    head = pad("", 28) + f"{'0 ->':>11}{'100 ->':>11}{'0 ->':>11}{'100 ->':>11}"
+          + f"{'input span':>17}{'ranked seats only':>20}{'unranked as floor':>20}")
+    head = pad("", 28) + f"{'lo':>8}{'hi':>9}{'lo':>10}{'hi':>10}{'lo':>10}{'hi':>10}"
     print("  " + head)
     print("  " + "-" * width(head))
     for path in PATHS:
         if path not in ranked:
             continue
-        lo, hi = ranked[path]
-        flo, fhi = floored[path]
+        lo, hi, slo, shi = ranked[path]
+        _, _, flo, fhi = floored[path]
         print("  " + pad(EXAMS[path], 20) + pad(path, 8)
-              + f"{lo:>11.1f}{hi:>11.1f}{flo:>11.1f}{fhi:>11.1f}")
+              + f"{lo:>8.1f}{hi:>9.1f}{slo:>10.1f}{shi:>10.1f}{flo:>10.1f}{fhi:>10.1f}")
     print("  Placing every unranked seat below every ranked one lifts the whole"
           " axis off 0.")
     print("  It only holds where the uncollected seats are genuinely the weaker"
