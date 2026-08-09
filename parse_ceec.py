@@ -1,12 +1,20 @@
 """Parse 大考中心 subject score distributions into a TSV of score counts.
 
-Two layouts, one per era:
+Three layouts, on two different scales:
 
   108-110  各科成績人數累計表 — 指考, raw marks binned to 100 points, each subject
            its own sheet block, scores split across two side-by-side halves.
   111-114  各科級分人數百分比累計表 — 分科測驗, and the companion
            學測使用於分發入學 table, both already on the 60-point 級分 scale the
            分發入學 formulas count.
+  100-114  各科級分人數分布表 — 學測 on its own 0-15 級分 scale, counted over
+           everyone who sat the exam rather than the 分發入學 entrants alone.
+           繁星 and 個人申請 quote this scale, so it is a separate `exam`.
+
+The 學測 set also publishes 2至4科不同科目組合級分人數分布表, the observed
+distribution of every multi-subject total. Reading a 國英數自 sum off that table
+needs no assumption about how the subjects correlate, unlike inferring one
+subject at a time. Those totals arrive as subjects named `國文、英文、數學、自然`.
 
 Output columns: year exam subject score seats, where `seats` is the number of
 candidates scoring in that bin.
@@ -20,6 +28,11 @@ import sys
 HERE = os.path.dirname(__file__)
 GRADES = "ceec/zhikao/*各科級分人數百分比累計表*.xls"
 MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
+# CEEC renamed these mid-series (分布表 -> 百分比累計表) and some years ship the
+# same table twice, once cumulated downwards. Only the 分布表 spelling is taken
+# for now, which covers 108-112; widening it needs deduplication first.
+GSAT = "ceec/xuece/*各科級分人數分布表*.xls"
+GSAT_COMBO = "ceec/xuece/*2至4科不同科目組合級分人數分布表*.xls"
 YEARS = range(108, 115)
 
 
@@ -84,7 +97,18 @@ def read_marks(sheet):
 
 
 def exam_of(path):
-    return "xuece" if "學測使用於分發入學" in os.path.basename(path) else "zhikao"
+    """Which exam, and on which scale, a statistics file reports.
+
+    `xuece` is 學測 rescaled to the 60 points 分發入學 counts; `gsat` is the same
+    exam on its native 0-15 級分 scale over the whole cohort. They are different
+    denominators over different populations, so they stay separate.
+    """
+    name = os.path.basename(path)
+    if "學測使用於分發入學" in name:
+        return "xuece"
+    if f"{os.sep}xuece{os.sep}" in path:
+        return "gsat"
+    return "zhikao"
 
 
 def parse(path):
@@ -93,15 +117,19 @@ def parse(path):
     year = re.match(r"(\d+)", os.path.basename(path)).group(1)
     if int(year) not in YEARS:
         return []
-    sheet = xlrd.open_workbook(path).sheet_by_index(0)
+    # The 學測 combination tables split 2科/3科/4科 across sheets; every other
+    # workbook holds one.
+    book = xlrd.open_workbook(path)
     reader = read_grades if "級分" in os.path.basename(path) else read_marks
     exam = exam_of(path)
-    return [(year, exam, s, score, n) for s, score, n in reader(sheet) if n]
+    return [(year, exam, s, score, n)
+            for sheet in book.sheets()
+            for s, score, n in reader(sheet) if n]
 
 
 def main(out_path):
     rows = []
-    for pattern in (GRADES, MARKS):
+    for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO):
         for path in sorted(glob.glob(os.path.join(HERE, pattern))):
             got = parse(path)
             if got:
