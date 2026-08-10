@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (after the backend is fixed)
 
 from lib.paths import path  # noqa: E402
+from parse import tcte  # noqa: E402
 from pool import model  # noqa: E402
 
 OUT = path("pool-densities.png")
@@ -22,8 +23,9 @@ OUT = path("pool-densities.png")
 STYLE = {
     "gsat": ("#1f6feb", "學測 (GSAT)"),
     "zhikao": ("#d1242f", "指考 / 分科測驗"),
-    "tongce": ("#1a7f37", "統測"),
 }
+STYLE.update({pool: (colour, tcte.pool_label(pool)) for pool, colour
+              in zip(tcte.POOLS, ("#1a7f37", "#57ab5a", "#0b4a22"))})
 FONTS = ["PingFang HK", "Heiti TC", "Arial Unicode MS", "Hiragino Sans GB"]
 
 
@@ -59,7 +61,7 @@ def draw(fitted, sizes, observations, error, naive, year, path=OUT):
     cohort = getattr(fitted, "cohort", 0.0) / 100.0
     if cohort:
         left.axhline(cohort, color="#57606a", linewidth=1.0, linestyle="--",
-                     label="the whole cohort, which 學測 + 統測 covers")
+                     label="the whole cohort, which 學測 and 統測 cover")
     left.set_xlim(0, 100)
     left.set_ylim(0, max([cohort] + [density_curve(fitted, exam)[1].max()
                                      for exam in exams]) * 1.18)

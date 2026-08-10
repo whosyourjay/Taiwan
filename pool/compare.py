@@ -209,7 +209,9 @@ def main():
     observations = flatten(groups)
     exams = sorted({exam for row in observations for exam in (row[0], row[2])})
     sizes = pool_fit.taker_counts()
-    bottleneck = sum({left, right} == {"gsat", "tongce"}
+    bottleneck = sum(complement.ACADEMIC in (left, right)
+                     and complement.MEASURE in (complement.measure(left),
+                                                complement.measure(right))
                      for left, _, right, _, _ in observations)
     print(f"{len(observations)} pairs in {len(groups)} department groups")
     print(f"using {bottleneck} GSAT–統測 pairs as the conservative BIC n")

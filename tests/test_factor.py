@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from scipy import special
 
-from pool import bars, factor, model
+from pool import bars, complement, factor, model
 
 
 def flat_pool(sizes, nodes=5):
@@ -12,7 +12,9 @@ def flat_pool(sizes, nodes=5):
     return model.LinearAbilityPool(values, sizes)
 
 
-SIZES = {"gsat": 120_000.0, "tongce": 66_000.0, "zhikao": 39_000.0}
+TONGCE = complement.VOCATIONAL[1]
+SIZES = {"gsat": 120_000.0, "zhikao": 39_000.0}
+SIZES.update(dict(zip(complement.VOCATIONAL, (8_000.0, 37_000.0, 21_000.0))))
 SHARP = dict.fromkeys(factor.LOADED, 0.999)
 
 
@@ -42,11 +44,10 @@ class TestDeterministicLimit(unittest.TestCase):
     """At λ = 1 a bar and an ability are the same fact, which is the old model."""
 
     def base(self):
-        return model.LinearAbilityPool(
-            {"gsat": [0.6, 1.0, 1.4], "tongce": [1.5, 1.0, 0.5],
-             "zhikao": [0.2, 1.0, 1.8]},
-            SIZES,
-        )
+        values = {"gsat": [0.6, 1.0, 1.4], "zhikao": [0.2, 1.0, 1.8]}
+        values.update(dict(zip(complement.VOCATIONAL,
+                               ([1.5, 1.0, 0.5], [1.2, 1.0, 0.8], [0.8, 1.0, 1.2]))))
+        return model.LinearAbilityPool(values, SIZES)
 
     def drift(self, loading, tops):
         """Worst gap between the factor reading and the deterministic one."""
@@ -195,7 +196,7 @@ def agreeing_pairs():
     pool = factor.FactorPool(flat_pool(SIZES), dict.fromkeys(factor.LOADED, 0.9))
     out = []
     for top in (0.02, 0.05, 0.1, 0.2, 0.35, 0.5):
-        for exam in ("gsat", "tongce"):
+        for exam in ("gsat", TONGCE):
             other = pool.tail(exam, pool.threshold(exam, [top]))[0]
             out.append((bars.Bar("zhikao", 20, top=top),
                         bars.Bar(exam, 20, top=other), 20.0))
@@ -230,7 +231,7 @@ class TestFit(unittest.TestCase):
     def test_matching_bars_leave_almost_nothing_to_explain(self):
         pool, error = factor.fit(agreeing_pairs(), SIZES, 2)
         self.assertLess(error, 1.0)
-        self.assertEqual(pool.degrees, 6 + len(factor.LOADED))
+        self.assertEqual(pool.degrees, complement.degrees(2) + len(factor.LOADED))
 
 
 def solve(fn, low, high, want, rounds=60):
@@ -244,27 +245,30 @@ def solve(fn, low, high, want, rounds=60):
     return (low + high) / 2
 
 
-def consistent_pairs(truth, gates=(0.25, 0.6), levels=8, tolerance=1e-6):
+def consistent_pairs(truth, gates=(0.25, 0.6), levels=8, tolerance=1e-6, nodes=96):
     """Bars that agree exactly at `truth`, so a fit has a truth to find.
 
     A strict gate puts a floor under what a rank bar can imply, so some levels
     are unreachable behind it. Those pairs would disagree at the truth itself
     and are dropped rather than fed to the fit as if they were evidence.
     """
-    pool = factor.FactorPool(flat_pool(SIZES), truth)
+    pool = factor.FactorPool(flat_pool(SIZES), truth, nodes)
     out = []
     for level in np.linspace(0.4, 0.95, levels):
+        top = solve(lambda t: pool.implied_top("zhikao", [1 - t])[0], 0.0, 1.0, level)
+        anchor = bars.Bar("zhikao", 20, top=1 - top)
+        left = pool.implied_top("zhikao", [1 - top])[0]
         for gate in gates:
             one = factor.Gates([(gate,)])
-            top = solve(lambda t: pool.implied_top("zhikao", [1 - t])[0],
-                        0.0, 1.0, level)
             score = solve(lambda s: pool.implied_rank("gsat", [s], one)[0],
                           -6.0, 6.0, level)
-            left = pool.implied_top("zhikao", [1 - top])[0]
-            right = pool.implied_rank("gsat", [score], one)[0]
-            if abs(left - right) < tolerance:
-                out.append((bars.Bar("zhikao", 20, top=1 - top),
+            if abs(left - pool.implied_rank("gsat", [score], one)[0]) < tolerance:
+                out.append((anchor,
                             bars.Bar("gsat", 20, score=score, gates=(gate,)), 20.0))
+        for exam in complement.VOCATIONAL:
+            share = solve(lambda t: pool.implied_top(exam, [1 - t])[0], 0.0, 1.0, level)
+            if abs(left - pool.implied_top(exam, [1 - share])[0]) < tolerance:
+                out.append((anchor, bars.Bar(exam, 20, top=1 - share), 20.0))
     return out
 
 
@@ -272,6 +276,7 @@ class TestRecovery(unittest.TestCase):
     """A fit that cannot find a loading it planted has nothing to say."""
 
     TRUTH = {"gsat": 0.85, "tongce": 0.80, "zhikao": 0.90, factor.RANK: 0.55}
+    NODES = 48
 
     def test_the_generated_pairs_agree_at_the_loadings_that_made_them(self):
         observations = consistent_pairs(self.TRUTH)
@@ -283,9 +288,10 @@ class TestRecovery(unittest.TestCase):
         self.assertAlmostEqual(factor.cost(packed, pool), 0.0, places=10)
 
     def test_it_recovers_a_loading_the_bars_actually_carry(self):
-        fitted, error = factor.fit(consistent_pairs(self.TRUTH), SIZES, 2, steps=30)
+        observations = consistent_pairs(self.TRUTH, levels=5, nodes=self.NODES)
+        fitted, error = factor.fit(observations, SIZES, 2, nodes=self.NODES, steps=30)
         self.assertLess(error, 0.5)
-        for measure in ("gsat", "zhikao", factor.RANK):
+        for measure in self.TRUTH:
             self.assertAlmostEqual(fitted.loadings[measure], self.TRUTH[measure],
                                    delta=0.05, msg=measure)
 

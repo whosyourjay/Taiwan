@@ -1,8 +1,13 @@
+import os
+import subprocess
+import sys
 import unittest
 
 import numpy as np
 
 from pool import bars, diagnose, factor, model
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SIZES = {"gsat": 120_000.0, "tongce": 66_000.0, "zhikao": 39_000.0}
 
@@ -60,6 +65,18 @@ class TestLevels(unittest.TestCase):
         noisy = diagnose.levels(pool_of(0.5), found)
         key = ("110", "A", "X")
         self.assertLess(noisy[key]["zhikao"], exact[key]["zhikao"])
+
+
+class TestDirectCommand(unittest.TestCase):
+    def test_it_imports_from_its_file_path(self):
+        # pool/ lands on sys.path ahead of the repository root, so without a
+        # shim `import diagnose` finds this module rather than the top-level one.
+        got = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "pool", "diagnose.py"), "--help"],
+            cwd=ROOT, text=True, capture_output=True, timeout=60, check=False,
+        )
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertIn("--steps", got.stdout)
 
 
 class TestDeterministic(unittest.TestCase):

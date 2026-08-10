@@ -51,15 +51,68 @@ def clean(text):
 SHARED_FIRST_PAPER = {"商業與管理群": "商管外語群", "外語群": "商管外語群"}
 MATH = "數學"
 
+# Which 共同科目數學 paper each 群 sits. The tables never say, so this is read
+# off the headcounts: it is the only assignment whose 群 sizes reproduce all
+# four published paper totals in 108, 109 and 110 at once, to within 55 of
+# roughly 90,000 candidates. tests/test_tcte.py holds it to that.
+MATH_PAPERS = {
+    "數學(A)": ("家政群", "衛生與護理類"),
+    "數學(B)": ("商業與管理群", "外語群", "餐旅群", "設計群", "農業群", "食品群",
+                "水產群", "海事群"),
+    "數學(C)": ("電機與電子群", "機械群", "動力機械群", "土木與建築群", "化工群",
+                "工程與管理類"),
+    "數學(S)": ("藝術群",),
+}
+# 數學(S) ran to 110 only, and its 群 sat 數學(A) afterwards, so the two papers
+# describe one pool of students across the years.
+POOL_PAPERS = {
+    "tongce_a": ("數學(A)", "數學(S)"),
+    "tongce_b": ("數學(B)",),
+    "tongce_c": ("數學(C)",),
+}
+POOLS = tuple(POOL_PAPERS)
+PAPER_OF = {group: paper for paper, groups in MATH_PAPERS.items() for group in groups}
+POOL_OF = {paper: pool for pool, papers in POOL_PAPERS.items() for paper in papers}
+
+
+def group_stem(group):
+    """A 群類 cut back to the 群 whose papers it sits."""
+    return re.sub(r"(?<=群).+$", "", group)
+
 
 def professional_subject(group, part, known):
     """Name the 專業科目 paper a 群(類) sits, or None if the tables lack it."""
-    stem = re.sub(r"(?<=群).+$", "", group)
+    stem = group_stem(group)
     for name in (group, stem, SHARED_FIRST_PAPER.get(stem, "")):
         subject = f"{part}-{name}"
         if name and subject in known:
             return subject
     return None
+
+
+def math_pool(group):
+    """Which of the three disjoint 統測 taker pools a 群類 sits in, or None."""
+    paper = PAPER_OF.get(group_stem(group))
+    return POOL_OF[paper] if paper else None
+
+
+def math_subject(group, known):
+    """Name the 數學 paper a 群類 sits, or the pooled paper where that is all.
+
+    A 群 whose own paper was never published falls back to the other paper of
+    its pool, which is what 藝術群 needs once 數學(S) stops appearing.
+    """
+    own = PAPER_OF.get(group_stem(group))
+    pool = POOL_OF.get(own)
+    for name in (own,) + POOL_PAPERS.get(pool, ()):
+        if name in known:
+            return name
+    return MATH if MATH in known else None
+
+
+def pool_label(pool):
+    """Name a 統測 taker pool after the math paper that defines it."""
+    return "統測" + POOL_PAPERS[pool][0][len(MATH):]
 
 
 def subject_of(part, tail):

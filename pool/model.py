@@ -203,9 +203,17 @@ def fit(observations, exams, sizes, bins=3, smooth=0.05, restarts=6,
     return pool, residual(pool, observations)
 
 
+RETAKE = "zhikao"
+
+
+def covering(sizes):
+    """Exams whose takers make up the cohort; 指考 only sits students again."""
+    return [exam for exam in sorted(sizes) if exam != RETAKE]
+
+
 def cohort_size(sizes):
     """Original cohort: the academic and vocational test-taking populations."""
-    return float(sizes["gsat"] + sizes["tongce"])
+    return float(sum(sizes[exam] for exam in covering(sizes)))
 
 
 def linear_degrees(exams, segments, zero_tails=()):

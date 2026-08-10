@@ -129,8 +129,12 @@ class FactorPool:
         return weights / weights.sum()
 
     def pair(self, measure):
-        """A measurement's loading and the spread of its noise."""
-        loading = self.loadings[measure]
+        """A measurement's loading and the spread of its noise.
+
+        Splitting 統測 into its 數學 papers splits who sat it, not how sharply
+        it reads, so those pools share one loading.
+        """
+        loading = self.loadings[complement.measure(measure)]
         return loading, math.sqrt(1.0 - loading * loading)
 
     def tail(self, exam, bars, measure=None):
@@ -282,8 +286,9 @@ def fit(observations, sizes, segments, loadings=LOADED, nodes=96, floor=0.2,
     """Fit the participation densities and every loading together.
 
     SLSQP differences the cost numerically, so a step costs one evaluation per
-    parameter plus one. At full size that is under a second, and `steps` caps
-    the whole fit near a minute. `pool.converged` says whether it needed the cap.
+    parameter plus one. At full size an evaluation is about 80ms and a step
+    about two seconds, so `steps` caps the whole fit near two minutes.
+    `pool.converged` says whether it needed the cap.
     """
     if not observations:
         raise ValueError("no matched departments to fit against")

@@ -8,10 +8,10 @@ mid-range and at nothing near the bottom, which no population can do.
 Counting people rules that out. Ability is a percentile inside the cohort, so
 the cohort's density along it is flat. Three facts then bound the fit. Nobody at
 one ability can be more of the cohort than all of it, which caps each exam.
-Every student sits 學測 or 統測, which puts a floor under those two together.
-And they double-count only the students who sit both, so the two taker counts
-added up exceed the cohort by exactly that overlap, which is all the room the
-floor leaves.
+Every student sits 學測 or one of the 統測 pools, which puts a floor under them
+together. And they double-count only the students who sit both, so the taker
+counts added up exceed the cohort by exactly that overlap, which is all the room
+the floor leaves.
 
 The cohort here is whoever sat at least one of the two, so students who sat
 neither are outside it rather than unaccounted for.
@@ -20,13 +20,22 @@ neither are outside it rather than unaccounted for.
 import numpy as np
 from scipy import optimize
 
+from parse import tcte
 from pool import model
 
 ACADEMIC = "gsat"
-VOCATIONAL = "tongce"
-RETAKE = "zhikao"
-EXAMS = (ACADEMIC, RETAKE, VOCATIONAL)
-COVER = (ACADEMIC, VOCATIONAL)
+# 統測 sets one 共同科目數學 paper per 群, and no student sits two, so its
+# takers are three disjoint populations rather than one.
+VOCATIONAL = tcte.POOLS
+MEASURE = "tongce"
+RETAKE = model.RETAKE
+EXAMS = (ACADEMIC, RETAKE) + VOCATIONAL
+COVER = (ACADEMIC,) + VOCATIONAL
+
+
+def measure(exam):
+    """The measurement an exam pool is read on, which its 群 does not change."""
+    return MEASURE if exam in VOCATIONAL else exam
 
 
 def cohort_size(sizes, overlap):
@@ -43,7 +52,7 @@ def degrees(segments):
     """Free ordinates left once each density is normalised."""
     if segments < 1:
         raise ValueError("a linear density needs at least one segment")
-    return 3 * segments
+    return len(EXAMS) * segments
 
 
 def trapezoid_weights(nodes):
@@ -146,6 +155,6 @@ def fit(observations, sizes, segments, overlap=0.0, nested=True, curvature=0.0):
 
 
 def cover(pool):
-    """People in 學測 and 統測 together at each node, over the cohort."""
+    """People in 學測 and the 統測 pools together at each node, over the cohort."""
     total = sum(pool.values[exam] * pool.sizes[exam] for exam in COVER)
     return total / pool.cohort

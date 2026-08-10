@@ -8,6 +8,7 @@ from unittest import mock
 
 import numpy as np
 
+from parse import tcte
 from pool import complement
 from pool import model as pool
 from pool import plot as pool_plot
@@ -232,7 +233,9 @@ class TestFit(unittest.TestCase):
         self.assertEqual(pool.linear_degrees(exams, 3, ("zhikao",)), 8)
 
 
-SIZES = {"gsat": 126_287.0, "tongce": 83_706.0, "zhikao": 38_053.0}
+SMALL, MIDDLE, LARGE = complement.VOCATIONAL
+SIZES = {"gsat": 126_287.0, "zhikao": 38_053.0,
+         SMALL: 9_593.0, MIDDLE: 46_132.0, LARGE: 27_192.0}
 
 
 class TestComplement(unittest.TestCase):
@@ -240,15 +243,17 @@ class TestComplement(unittest.TestCase):
 
     def observations(self):
         return [
-            ("gsat", 0.10, "tongce", 0.20, 3.0),
+            ("gsat", 0.10, MIDDLE, 0.20, 3.0),
             ("gsat", 0.20, "zhikao", 0.25, 2.0),
-            ("tongce", 0.30, "zhikao", 0.35, 1.0),
-            ("gsat", 0.50, "tongce", 0.60, 4.0),
+            (MIDDLE, 0.30, "zhikao", 0.35, 1.0),
+            ("gsat", 0.50, LARGE, 0.60, 4.0),
+            ("gsat", 0.40, SMALL, 0.45, 2.0),
         ]
 
     def test_overlap_shrinks_the_cohort_below_the_taker_counts(self):
         both = complement.cohort_size(SIZES, 0.0)
-        self.assertAlmostEqual(both, SIZES["gsat"] + SIZES["tongce"])
+        vocational = sum(SIZES[exam] for exam in complement.VOCATIONAL)
+        self.assertAlmostEqual(both, SIZES["gsat"] + vocational)
         self.assertAlmostEqual(complement.cohort_size(SIZES, 0.25), both / 1.25)
         with self.assertRaises(ValueError):
             complement.cohort_size(SIZES, -0.1)
@@ -264,8 +269,11 @@ class TestComplement(unittest.TestCase):
                                        overlap=overlap)
             cover = complement.cover(fitted)
             self.assertGreaterEqual(cover.min(), 1.0 - 1e-6, "the floor holds")
-            # Spent everywhere at once the slack would be exactly 1 + overlap.
-            self.assertLessEqual(float(np.mean(cover[[0, -1]])), 1.0 + overlap + 1e-6)
+            # Every density integrates to its taker count, so however the fit
+            # spends the slack it averages exactly 1 + overlap over the axis.
+            weights = complement.trapezoid_weights(len(cover))
+            self.assertAlmostEqual(float(weights @ cover) / (len(cover) - 1),
+                                   1.0 + overlap, places=6)
 
     def test_no_exam_holds_more_people_than_the_cohort(self):
         fitted, _ = complement.fit(self.observations(), SIZES, 4, overlap=0.1)
@@ -285,17 +293,20 @@ class TestComplement(unittest.TestCase):
 
     def test_recovers_a_planted_population(self):
         # Thresholds generated from a known pool have to lead back to it.
-        sizes = {"gsat": 120_000.0, "tongce": 80_000.0, "zhikao": 40_000.0}
+        sizes = {"gsat": 120_000.0, "zhikao": 40_000.0,
+                 SMALL: 10_000.0, MIDDLE: 45_000.0, LARGE: 25_000.0}
         planted = pool.LinearAbilityPool(
             {"gsat": [4 / 3, 2 / 3, 4 / 3, 2 / 3],
-             "tongce": [0.5, 1.5, 0.5, 1.5],
-             "zhikao": [0.2, 0.8, 1.6, 1.0]},
+             "zhikao": [0.2, 0.8, 1.6, 1.0],
+             SMALL: [0.2, 1.8, 0.2, 1.8],
+             MIDDLE: [0.6, 1.4, 0.6, 1.4],
+             LARGE: [0.44, 1.56, 0.44, 1.56]},
             sizes,
         )
         observations = [
             (left, top, right, matching_top(planted, left, top, right), 1.0)
-            for left, right in (("gsat", "tongce"), ("gsat", "zhikao"),
-                                ("tongce", "zhikao"))
+            for left, right in [(v, "gsat") for v in complement.VOCATIONAL]
+            + [(v, "zhikao") for v in complement.VOCATIONAL] + [("gsat", "zhikao")]
             for top in (0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95)
         ]
         fitted, mae = complement.fit(observations, sizes, 3, overlap=0.05,
@@ -306,8 +317,9 @@ class TestComplement(unittest.TestCase):
                                        atol=0.05)
 
     def test_degrees_drop_one_normalisation_per_exam(self):
-        self.assertEqual(complement.degrees(3), 9)
-        self.assertEqual(complement.degrees(1), 3)
+        exams = len(complement.EXAMS)
+        self.assertEqual(complement.degrees(3), 3 * exams)
+        self.assertEqual(complement.degrees(1), exams)
         with self.assertRaises(ValueError):
             complement.degrees(0)
 
@@ -321,6 +333,44 @@ def matching_top(built, exam_a, top_a, exam_b):
     ability = built.ability(exam_a, top_a)
     tops = np.linspace(0.0, 1.0, 200001)
     return float(tops[np.argmin(np.abs(built.abilities(exam_b, tops) - ability))])
+
+
+class TestVocationalPools(unittest.TestCase):
+    """A 統測 bar is a percentile inside the 群 that sat its 數學 paper."""
+
+    def row(self, **fields):
+        got = {"year": pool_fit.YEAR, "path": "tech", "group": "機械群"}
+        got.update(fields)
+        return got
+
+    def test_a_tech_row_reads_against_the_pool_that_sat_its_paper(self):
+        self.assertEqual(pool_fit.exam_of(self.row()), tcte.math_pool("機械群"))
+        self.assertNotEqual(pool_fit.exam_of(self.row(group="商業與管理群")),
+                            pool_fit.exam_of(self.row()))
+
+    def test_a_class_suffix_lands_in_the_same_pool_as_its_group(self):
+        self.assertEqual(pool_fit.exam_of(self.row(group="電機與電子群資電類")),
+                         pool_fit.exam_of(self.row(group="電機與電子群電機類")))
+
+    def test_another_year_carries_no_bar(self):
+        self.assertIsNone(pool_fit.exam_of(self.row(year="109")))
+
+    def test_the_academic_paths_still_name_their_exam(self):
+        for path, exam in (("uac", "zhikao"), ("star", "gsat"), ("apply", "gsat")):
+            self.assertEqual(pool_fit.exam_of(self.row(path=path)), exam)
+
+    def test_taker_counts_split_the_vocational_exam_into_its_pools(self):
+        counts = pool_fit.taker_counts()
+        self.assertNotIn("tongce", counts)
+        self.assertTrue(set(complement.EXAMS) <= set(counts))
+        papers = pool_fit.subject_counts(pool_fit.YEAR)["tongce"]
+        self.assertAlmostEqual(sum(counts[e] for e in complement.VOCATIONAL),
+                               papers[tcte.MATH], places=6)
+
+    def test_a_pool_is_read_on_the_measurement_its_exam_sets(self):
+        for exam in complement.VOCATIONAL:
+            self.assertEqual(complement.measure(exam), complement.MEASURE)
+        self.assertEqual(complement.measure("gsat"), "gsat")
 
 
 class TestPlotCommand(unittest.TestCase):
