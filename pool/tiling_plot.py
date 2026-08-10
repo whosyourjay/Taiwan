@@ -34,8 +34,12 @@ def draw(points, fitted, smoothed, shares, total, out=OUT):
         tops, levels = fitted[exam]
         lines.step(100 * (1 - tops), 100 * levels, where="post", color=colour,
                    linewidth=1.0, alpha=0.35)
-        lines.plot(100 * grid, 100 * smoothed[exam](grid), color=colour,
-                   linewidth=2.4, label=f"{label}  ({len(tops):,} distinct bars)")
+        spline = smoothed[exam]
+        lines.plot(100 * grid, 100 * spline(grid), color=colour, linewidth=2.4,
+                   label=f"{label}  ({len(spline.x)} knots"
+                         f" over {len(tops):,} bars)")
+        lines.plot(100 * spline.x, 100 * spline(spline.x), "o", color=colour,
+                   markersize=3.5, markeredgewidth=0)
     scatter.set_title("Every department-path, sized by seats")
     lines.set_title("Smoothed, over the bars it came from")
 

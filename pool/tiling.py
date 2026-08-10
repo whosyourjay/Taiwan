@@ -28,6 +28,16 @@ from lib.paths import ranking_path
 from pool import fit as pool_fit
 
 RANKING = "rank-departments.tsv"
+GROUPS = "rank-application-groups.tsv"
+
+# 分發 and 統測登記分發 publish a cutoff for every 系組, so each one can be placed
+# on its own. 繁星 and 個申 publish one cutoff per department, and splitting their
+# seats would scatter them along the axis under a bar that never moved.
+PER_GROUP = ("uac", "tech")
+
+# Places where the smoothed curve is pinned. Thousands of bars carry far less
+# shape than that, and a consumer reading the curve pays for every one of them.
+KNOTS = 10
 
 
 def ranked(source=RANKING):
@@ -46,17 +56,26 @@ def ranked(source=RANKING):
     return order, {name: sum(got) / len(got) for name, got in schools.items()}
 
 
-def seats_in_order(rows, order, schools):
-    """Department-paths from the best department down, with their bars.
+def grouped(source=GROUPS):
+    """Score for each 系組 the ranking placed separately from its department."""
+    return {(row["school"], row["dept"], row["application_group"]): float(row["score"])
+            for row in tsvio.read_rows(ranking_path(source))}
+
+
+def seats_in_order(rows, order, schools, groups=None):
+    """Department-paths from the best down, each at the finest rank it has.
 
     A seat occupies ability whether or not its bar can be read, so 繁星 belongs
     here even though its cutoff is a rank inside one school.
     """
+    groups = groups or {}
     out = []
     for row in rows:
         exam = pool_fit.exam_of(row)
         key = (row["school"], row["dept"])
         score = order.get(key, schools.get(row["school"]))
+        if row["path"] in PER_GROUP:
+            score = groups.get((*key, row.get("application_group")), score)
         if exam is None or score is None:
             continue
         out.append((score, exam, pool_fit.top_of(row), float(row["seats"])))
@@ -125,14 +144,16 @@ def knots(tops, levels, weights, count):
     Seats rather than bars, so a stretch of the axis that many students actually
     sit in gets the detail, and a long tail of tiny departments does not.
     """
+    if count >= len(tops):
+        return np.array(tops), np.array(levels)
     carried = np.cumsum(weights)
-    wanted = np.linspace(0.0, carried[-1], count + 1)[1:]
+    wanted = np.linspace(0.0, carried[-1], count)[1:]
     picked = sorted({0} | {int(np.searchsorted(carried, w)) for w in wanted})
     picked = [i for i in picked if i < len(tops)]
     return np.array(tops)[picked], np.array(levels)[picked]
 
 
-def smooth(points, count=24):
+def smooth(points, count=KNOTS):
     """A curve with a derivative, so it can be differentiated into a density.
 
     Isotonic output is a staircase, and the height of a step says nothing except
@@ -147,28 +168,41 @@ def smooth(points, count=24):
     return interpolate.PchipInterpolator(bottoms, rising, extrapolate=True)
 
 
-def seat_density(placed, bins=160, window=9):
-    """Seats per exam across the admitted pool, which by construction fills it.
+def carried_seats(placed, count=KNOTS):
+    """Each exam's seats below an admit percentile, as a smooth rising curve.
 
-    Each admit holds one seat on one path, so at any ability the paths divide the
-    pool between them and their shares add to one. Nothing here assumes who sat
-    which exam — a student sitting two of them still holds a single seat, so the
-    double counting that dogged the taker pools cannot arise.
+    Walking the pool from the bottom up gives every exam a staircase of seats
+    collected so far. Reading that staircase at evenly spaced percentiles is
+    reading it at evenly spaced seats, since the axis counts seats.
     """
-    total = sum(seats for *_, seats in placed)
-    counts = collections.defaultdict(lambda: np.zeros(bins))
-    above = 0.0
-    for _, exam, _, seats in placed:
-        low, above = above, above + seats
-        # Spread the department's seats over the slice of the pool they fill.
-        edges = np.clip(np.arange(bins + 1) * total / bins, low, above)
-        counts[exam] += np.diff(edges) * bins / total
-    box = np.ones(window) / window
-    edge = np.convolve(np.ones(bins), box, mode="same")
-    # `placed` runs best first, so the bins came out with the top of the pool at
-    # index zero. Turn them round to read low ability first, like every axis here.
-    return ({exam: (np.convolve(got, box, mode="same") / edge)[::-1]
-             for exam, got in counts.items()}, total)
+    order = list(reversed(placed))
+    seats = np.array([s for *_, s in order])
+    total = float(seats.sum())
+    edges = np.concatenate([[0.0], np.cumsum(seats)]) / total
+    picks = np.linspace(0.0, 1.0, count)
+    out = {}
+    for exam in sorted({name for _, name, _, _ in order}):
+        mine = np.where(np.array([name == exam for _, name, _, _ in order]), seats, 0)
+        carried = np.concatenate([[0.0], np.cumsum(mine)])
+        out[exam] = interpolate.PchipInterpolator(
+            picks, np.interp(picks, edges, carried)
+        )
+    return out, total
+
+
+def seat_shares(placed, count=KNOTS, grid=400):
+    """Which exam fills the pool at each ability, from the slope of those curves.
+
+    Each admit holds one seat on one path, so the paths divide the pool between
+    them and their shares add to one. Nothing here assumes who sat which exam — a
+    student sitting two of them still holds a single seat, so the double counting
+    that dogged the taker pools cannot arise.
+    """
+    fitted, total = carried_seats(placed, count)
+    axis = np.linspace(0.0, 1.0, grid)
+    rates = {exam: spline.derivative()(axis) for exam, spline in fitted.items()}
+    stacked = sum(rates.values())
+    return {exam: got / stacked for exam, got in rates.items()}, total
 
 
 def curves(points):
@@ -176,7 +210,7 @@ def curves(points):
     return {exam: curve(got) for exam, got in points.items()}
 
 
-def splines(points, count=24):
+def splines(points, count=KNOTS):
     """Every exam's smoothed curve."""
     return {exam: smooth(got, count) for exam, got in points.items()}
 
@@ -226,12 +260,12 @@ def report(points, fitted, total, held):
 def main():
     rows, _ = pool_fit.observations()
     order, schools = ranked()
-    placed = seats_in_order(rows, order, schools)
+    placed = seats_in_order(rows, order, schools, grouped())
     held = sum(seats for *_, seats in placed)
     points, total = tile(placed)
     fitted = curves(points)
     report(points, fitted, total, held)
-    shares, _ = seat_density(placed)
+    shares, _ = seat_shares(placed)
     from pool.tiling_plot import draw
 
     print(f"\nwrote {draw(points, fitted, splines(points), shares, total)}")
