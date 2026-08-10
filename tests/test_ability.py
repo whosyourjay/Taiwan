@@ -29,7 +29,10 @@ class TestRead(unittest.TestCase):
         self.assertAlmostEqual(seats, 10.0)
 
     def test_a_row_with_no_bar_is_skipped(self):
-        # 繁星 ranks inside a school, so it never becomes an ability.
+        # 分發 publishes a few departments with no usable cutoff.
+        self.assertEqual(ability.read([row("uac", 40)], STRAIGHT), [])
+
+    def test_繁星_with_neither_floor_is_skipped(self):
         self.assertEqual(ability.read([row("star", 40)], STRAIGHT), [])
 
     def test_another_year_is_skipped(self):
@@ -48,6 +51,42 @@ class TestRead(unittest.TestCase):
             [row("uac", 10, ceec_percentile=0.99),
              row("uac", 10, ceec_percentile=0.01, dept="乙系")], wild)]
         self.assertEqual(levels, [1.0, 0.0])
+
+
+class TestStar(unittest.TestCase):
+    """繁星 holds two floors, and the harder one is taken."""
+
+    def star(self, gpa, gates, seats=20):
+        return row("star", seats, class_pct=100.0 - gpa, xuece_gates=gates)
+
+    def test_the_class_rank_needs_no_curve(self):
+        scored = ability.read([self.star(5.0, {})], STRAIGHT)
+        _, exam, level, _ = scored[0]
+        self.assertEqual(exam, ability.STAR)
+        self.assertAlmostEqual(level, 0.95)
+
+    def test_the_harder_of_the_two_floors_wins(self):
+        # Class rank 0.60 against a 學測 gate at the 80th percentile.
+        scored = ability.read([self.star(40.0, {"stem": 80.0})], STRAIGHT)
+        self.assertAlmostEqual(scored[0][2], 0.80)
+
+    def test_the_class_rank_wins_when_it_binds_harder(self):
+        scored = ability.read([self.star(5.0, {"stem": 40.0})], STRAIGHT)
+        self.assertAlmostEqual(scored[0][2], 0.95)
+
+    def test_the_strictest_subject_family_sets_the_gate(self):
+        scored = ability.read(
+            [self.star(50.0, {"stem": 60.0, "language": 88.0})], STRAIGHT)
+        self.assertAlmostEqual(scored[0][2], 0.88)
+
+    def test_繁星_scores_apart_from_the_學測_paths(self):
+        scored = ability.read([self.star(5.0, {}, seats=100),
+                               row("apply", 100, cohort_top=0.5)], STRAIGHT)
+        got = ability.table(scored, ("school", "dept"),
+                            ("gsat", ability.STAR))[0]
+        self.assertAlmostEqual(got[ability.STAR], 95.0)
+        self.assertAlmostEqual(got["gsat"], 50.0)
+        self.assertAlmostEqual(got["ability"], 72.5)
 
 
 class TestTable(unittest.TestCase):

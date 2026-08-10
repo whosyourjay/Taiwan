@@ -25,6 +25,7 @@ LEVELS = (
     ("ability-departments.tsv", ("school", "dept")),
     ("ability-groups.tsv", ("school", "dept", "application_group")),
 )
+STAR = "star"
 
 
 def curves():
@@ -36,17 +37,44 @@ def curves():
     return rows, tiling.splines(points)
 
 
+def held(spline, bottom):
+    """Where a share of one exam's takers lands, held inside the pool."""
+    return float(np.clip(spline(bottom), 0.0, 1.0))
+
+
+def star_level(row, splines):
+    """繁星 quotes two floors: a 學測 gate and a rank inside the admittee's school.
+
+    A class rank already counts students, so under the assumption that schools
+    are alike it reads as an ability with no curve at all. The 學測 gate needs
+    one. Both are floors rather than the margin, so take whichever binds harder.
+    This is the naive reading of the pair, and wants replacing.
+    """
+    seen = []
+    if row.get("class_pct") is not None:
+        seen.append(float(row["class_pct"]) / 100.0)
+    gates = row.get("xuece_gates") or {}
+    if gates and "gsat" in splines:
+        seen.append(held(splines["gsat"], max(gates.values()) / 100.0))
+    return max(seen) if seen else None
+
+
+def levels(row, splines):
+    """Every ability a row's thresholds imply, tagged by what produced each."""
+    exam = pool_fit.exam_of(row)
+    if exam is None:
+        return []
+    if row["path"] == "star":
+        level = star_level(row, splines)
+        return [] if level is None else [(STAR, level)]
+    top = pool_fit.top_of(row) if exam in splines else None
+    return [] if top is None else [(exam, held(splines[exam], 1.0 - top))]
+
+
 def read(rows, splines):
-    """Turn every readable threshold into an ability, through its exam's curve."""
-    out = []
-    for row in rows:
-        exam = pool_fit.exam_of(row)
-        top = pool_fit.top_of(row) if exam in splines else None
-        if top is None:
-            continue
-        level = float(np.clip(splines[exam](1.0 - top), 0.0, 1.0))
-        out.append((row, exam, level, float(row["seats"])))
-    return out
+    """Turn every readable threshold into an ability, through its own curve."""
+    return [(row, exam, level, float(row["seats"]))
+            for row in rows for exam, level in levels(row, splines)]
 
 
 def collect(scored, columns):
@@ -123,8 +151,8 @@ def report(scored, exams, rows):
 
 def main():
     rows, splines = curves()
-    exams = sorted(splines)
     scored = read(rows, splines)
+    exams = sorted({exam for _, exam, _, _ in scored})
     report(scored, exams, rows)
     print()
     for name, columns in LEVELS:

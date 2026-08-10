@@ -17,6 +17,7 @@ import ceec_score
 import rank_uac
 from lib import tsvio
 from lib.paths import data_path
+from parse import tcte
 from pool import complement, model
 
 # 110 is the year every school was collected for, and the last year 分發入學 ran
@@ -38,7 +39,6 @@ def fit_pool(observations, sizes):
 
 EXAMS = {
     "uac": "zhikao",
-    "tech": "tongce",
     "star": "gsat",
     "apply": "gsat",
     "tech_apply": "gsat",
@@ -46,8 +46,16 @@ EXAMS = {
 
 
 def exam_of(row):
-    """Which exam pool a row's bar is a percentile inside."""
-    return EXAMS.get(row["path"]) if row["year"] == YEAR else None
+    """Which exam pool a row's bar is a percentile inside.
+
+    A 統測 bar is a percentile inside the 群 that sat its 數學 paper, not
+    inside 統測 as a whole, because no student sits two of those papers.
+    """
+    if row["year"] != YEAR:
+        return None
+    if row["path"] == "tech":
+        return tcte.math_pool(row["group"])
+    return EXAMS.get(row["path"])
 
 
 def top_of(row):
@@ -151,7 +159,7 @@ def source_rows():
     rank_uac.unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     apply_rows = rank_uac.joinable(list(rank_uac.load_apply(cohort)), known)
-    star_rows = rank_uac.joinable(list(rank_uac.load_star()), known)
+    star_rows = rank_uac.joinable(list(rank_uac.load_star(cohort=cohort)), known)
     tech_apply = load_tech_apply(distributions)
     rows = uac_rows + tech_rows + apply_rows + star_rows + tech_apply
     rank_uac.unify_spelling(rows)
@@ -185,20 +193,30 @@ def main():
     print(f"\nwrote {written}")
 
 
-def taker_counts():
-    """How many sat each exam in YEAR, from the published distributions."""
+def subject_counts(year):
+    """How many sat each subject of each exam, from the published distributions."""
     import csv
 
     totals = collections.defaultdict(lambda: collections.defaultdict(float))
     for name in ("ceec-scores.tsv", "tongce-scores.tsv"):
         with open(data_path(name), encoding="utf-8") as f:
             for row in csv.DictReader(f, delimiter="\t"):
-                if row["year"] != YEAR or "、" in row["subject"]:
+                if row["year"] != year or "、" in row["subject"]:
                     continue
                 totals[row["exam"]][row["subject"]] += float(row["seats"])
+    return totals
+
+
+def taker_counts(year=YEAR):
+    """How many sat each exam pool in `year`, from the published distributions."""
+    totals = subject_counts(year)
+    papers = totals.pop("tongce", {})
     # The most-sat subject is the closest thing to a headcount: everyone sits
     # 國文, but the science and language papers split the cohort.
-    return {exam: max(subjects.values()) for exam, subjects in totals.items()}
+    counts = {exam: max(subjects.values()) for exam, subjects in totals.items()}
+    counts.update({pool: sum(papers.get(paper, 0.0) for paper in names)
+                   for pool, names in tcte.POOL_PAPERS.items()})
+    return counts
 
 
 if __name__ == "__main__":
