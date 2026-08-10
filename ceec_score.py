@@ -1,16 +1,17 @@
-"""Convert a weighted UAC cutoff to an equivalent CEEC subject percentile.
+"""Convert a weighted UAC cutoff to an equal-subject quantile coordinate.
 
 The UAC tables publish only the weighted total at the admission margin, not the
 admitted student's score in each subject.  Marginal CEEC distributions cannot
-recover that missing joint score vector.  We use the smallest explicit model:
-the marginal student is at the same percentile in every subject in the formula.
-The percentile whose subject quantiles reproduce the published weighted total
-is the row's comparable score.
+recover that missing joint score vector. We use the smallest explicit model:
+the marginal student holds one common marginal quantile in every selected
+subject. Its subject quantiles reproduce the published weighted total. This is
+not the percentile of that weighted total among real exam takers.
 """
 
 import bisect
 import collections
 import csv
+import re
 
 import numpy as np
 
@@ -34,6 +35,22 @@ SUBJECT_NAMES = {
     "自": "自然",
 }
 XUECE_SUBJECTS = {"國", "英", "數A", "數B", "社", "自"}
+GATE = re.compile(r"(\S+?)(?:頂標|前標|均標|後標|底標)(\d+)")
+
+
+def gate_top_fractions(cohort, year, gates):
+    """Shares of a cohort that clear every recognised, binding gate."""
+    return [top for _, top in binding_gates(cohort, year, gates)]
+
+
+def binding_gates(cohort, year, gates):
+    """Recognised binding gates as ``(subject, cohort share above its bar)``."""
+    out = []
+    for subject, level in GATE.findall(gates):
+        top = cohort.top_fraction(year, subject, level)
+        if top is not None and top < 0.95:
+            out.append((subject, top))
+    return out
 
 
 def weighted_midpoints(rows, field):
@@ -168,6 +185,23 @@ class CohortPercentiles:
         total = sum(counts.values())
         return sum(n for score, n in counts.items() if score >= float(level)) / total
 
+    def gate_top_fractions(self, year, gates):
+        """Shares of 學測 takers that clear each binding gate in a string."""
+        return gate_top_fractions(self, year, gates)
+
+    def binding_gates(self, year, gates):
+        """Recognised binding gates, retaining the subject used by each bar."""
+        return binding_gates(self, year, gates)
+
+    def strictest_gate_percentile(self, year, gates):
+        """The national percentile of a row's strictest binding 學測 gate.
+
+        This is a coordinate for calibration, not the joint probability of
+        clearing every gate. The latter needs joint subject-score data.
+        """
+        tops = self.gate_top_fractions(year, gates)
+        return 0.0 if not tops else 1.0 - min(tops)
+
 
 class ScoreDistributions:
     def __init__(self, rows):
@@ -216,13 +250,17 @@ class ScoreDistributions:
     def tongce_key(self, year, subject, group):
         """Map a 統測 formula subject to its distribution, given the row's 群(類).
 
-        國文 and 英文 are one paper nationally and 數學 is pooled over its four,
-        but each 專業科目 belongs to a 群, so that name has to be looked up.
+        國文 and 英文 are one paper nationally, but 數學 is four papers and each
+        專業科目 belongs to a 群, so both names have to be looked up.
         """
         if subject.startswith("專業"):
             subject = tcte.professional_subject(
                 group, subject, self.subjects(year, "tongce")
             )
+            if subject is None:
+                return None
+        elif subject == tcte.MATH:
+            subject = tcte.math_subject(group, self.subjects(year, "tongce"))
             if subject is None:
                 return None
         key = (str(year), "tongce", subject)
@@ -264,7 +302,7 @@ class ScoreDistributions:
         return float(np.interp(float(cutoff), weights @ table, grid))
 
     def formula_percentile(self, year, formula, cutoff):
-        """Return the equal-subject percentile matching a weighted total.
+        """Return the equal-subject quantile coordinate matching a total.
 
         Returns None when a formula contains an exam without a CEEC distribution,
         currently only 術科.
@@ -275,7 +313,7 @@ class ScoreDistributions:
         return self.solve(subjects, cutoff) if subjects else None
 
     def gsat_percentile(self, year, formula, cutoff):
-        """Read a weighted native 0-15 學測 total against 學測 takers."""
+        """Read a weighted native 0-15 學測 total on the same coordinate."""
         def key_of(subject):
             name = GSAT_FULL.get(subject, subject)
             key = (str(year), "gsat", name)
@@ -285,7 +323,7 @@ class ScoreDistributions:
         return self.solve(subjects, cutoff) if subjects else None
 
     def tongce_percentile(self, year, formula, cutoff, group):
-        """The same reading of a 統測 weighted total, against 統測's own takers."""
+        """Read a 統測 weighted total on the same equal-subject coordinate."""
         subjects = self.weighted_subjects(
             formula, lambda s: self.tongce_key(year, s, group)
         )

@@ -8,13 +8,11 @@ second fact is what lets a fit tell a noisy measurement from a selective one.
 """
 
 import collections
-import re
 
+import ceec_score
 import rank_uac
 from pool import factor
 
-# A gate reads as subject, band, and the 級分 that band stood at that year.
-GATE = re.compile(r"(\S+?)(?:頂標|前標|均標|後標|底標)(\d+)")
 RANK_PATH = "star"
 
 
@@ -35,12 +33,7 @@ def star_gates(row, cohort):
     A gate almost nobody fails says nothing about who was admitted, so it goes
     the way a non-binding 篩選 does.
     """
-    out = []
-    for subject, level in GATE.findall(row["gates"]):
-        top = cohort.top_fraction(row["year"], subject, level)
-        if top is not None and top < rank_uac.NON_BINDING:
-            out.append(top)
-    return out
+    return ceec_score.gate_top_fractions(cohort, row["year"], row["gates"])
 
 
 def bar_of(row, exam, top_of, cohort):

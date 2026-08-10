@@ -71,6 +71,19 @@ class TestCohortPercentiles(unittest.TestCase):
         got = [self.cohort.top_fraction("114", "國文", s) for s in (13, 14, 15)]
         self.assertEqual(got, sorted(got, reverse=True))
 
+    def test_strictest_gate_uses_the_rarest_binding_subject(self):
+        got = self.cohort.strictest_gate_percentile(
+            "114", "國文頂標15 國文前標14 英聽頂標5"
+        )
+        self.assertAlmostEqual(got, 0.9)
+
+    def test_binding_gates_retain_the_subject(self):
+        got = self.cohort.binding_gates("114", "國文頂標15 英聽頂標5")
+        self.assertEqual(got, [("國文", 0.1)])
+
+    def test_no_recognised_gate_has_no_gate_coordinate(self):
+        self.assertEqual(self.cohort.strictest_gate_percentile("114", "英聽頂標5"), 0.0)
+
 
 class TestAgainstPublishedBands(unittest.TestCase):
     """The 級分 tables must reproduce the 檢定標準 printed in the 繁星 PDFs.

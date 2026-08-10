@@ -84,6 +84,78 @@ class TestCurve(unittest.TestCase):
                 self.assertTrue(0.0 <= r["pct"] <= 100.0)
 
 
+class TestComponent(unittest.TestCase):
+    def test_fit_uses_only_department_years_that_link_paths(self):
+        observations = [
+            (("114", "A", "D"), "uac", 50, 10),
+            (("114", "A", "D"), "tech", 50, 10),
+            (("114", "B", "D"), "uac", 90, 10),
+        ]
+        got = rank_uac.matched_component_observations(observations)
+        self.assertEqual({point[0] for point in got}, {("114", "A", "D")})
+
+    def test_shared_component_recovers_exact_measurements(self):
+        observations = []
+        families = ("language", "social", "stem")
+        offsets = {"language": 10, "social": 20, "stem": 30}
+        for index, score in enumerate(range(-4, 5)):
+            key = ("114", f"S{index}", "D")
+            family = families[index % len(families)]
+            observations += [
+                (key, "uac", 50 + 10 * score, 10),
+                (key, "tech", 40 + 20 * score, 10),
+                (key, "star:class", 60 + 15 * score, 10),
+                (key, "star:gate:language", 30 + 8 * score, 10),
+                (key, f"apply:{family}", offsets[family] + 11 * score, 10),
+            ]
+        model, stats = rank_uac.fit_component(observations)
+        self.assertGreater(stats["r2"], 0.999999)
+        for key, variable, value, _ in observations:
+            self.assertAlmostEqual(model.reconstruct(variable, model.scores[key]), value, places=4)
+        first, last = observations[0][0], observations[-1][0]
+        self.assertLess(model.scores[first], model.scores[last])
+        self.assertLess(rank_uac.component_validation_error(observations), 1e-5)
+
+
+class TestXueceClusters(unittest.TestCase):
+    def test_subject_subsets_form_the_intended_families(self):
+        self.assertEqual(rank_uac.xuece_cluster("國英"), "language")
+        self.assertEqual(rank_uac.xuece_cluster("國英社"), "social")
+        self.assertEqual(rank_uac.xuece_cluster("英數A自"), "stem")
+        self.assertEqual(rank_uac.xuece_cluster("數學"), "stem")
+        self.assertEqual(rank_uac.xuece_cluster("國英社", families=2), "language")
+        self.assertEqual(rank_uac.xuece_cluster("國英社", families=1), "all")
+
+
+class TestStarGateFamilies(unittest.TestCase):
+    def test_each_family_keeps_its_strictest_gate(self):
+        class Cohort:
+            @staticmethod
+            def binding_gates(year, gates):
+                return [("國文", 0.3), ("英文", 0.1), ("社會", 0.4), ("自然", 0.2)]
+
+        got = rank_uac.star_gate_families(Cohort(), "114", "unused")
+        self.assertEqual(got, {"language": 90.0, "social": 60.0, "stem": 80.0})
+
+    def test_star_measurements_keep_each_subject_family(self):
+        rows = [
+            {
+                "year": "114", "school": "S", "dept": "D", "seats": 10,
+                "class_pct": 80, "xuece_gates": {"language": 70, "stem": 90},
+            },
+            {
+                "year": "114", "school": "S", "dept": "D", "seats": 30,
+                "class_pct": 60, "xuece_gates": {"language": 50, "social": 40},
+            },
+        ]
+        values, seats = rank_uac.by_dept_star_inputs(rows)[("114", "S", "D")]
+        self.assertEqual(seats, 40)
+        self.assertEqual(values["star:class"], 65)
+        self.assertEqual(values["star:gate:language"], 55)
+        self.assertEqual(values["star:gate:social"], 40)
+        self.assertEqual(values["star:gate:stem"], 90)
+
+
 class TestAggregate(unittest.TestCase):
     def test_paths_weight_by_annual_seats_not_years_of_coverage(self):
         data = [

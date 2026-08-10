@@ -41,6 +41,7 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 - `rankings/rank-departments.tsv` — 3,040 (institution, department) pairs
 - `rankings/rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
   department merging
+- `rankings/test-relationships.png` — cross-path evidence for the shared component
 - `data/high-school-destinations.tsv` — 110 北一女 graduate destinations
 - `data/high-school-entry-cutoffs.tsv` — 107 基北區 high-school entry cutoffs
 - `data/cap-grade-distributions.tsv` — 107 national CAP A/B/C category counts
@@ -105,10 +106,10 @@ model before estimating an entering-school median.
 
 | Path | Row basis |
 | --- | --- |
-| 分發入學 | CEEC equal-subject percentile; calibrated `norm` fallback for 術科 rows |
+| 分發入學 | CEEC equal-subject coordinate; `norm` fallback for 術科 |
 | 聯合登記分發 | `norm` |
-| 繁星推薦（第一至七類） | `100 - high-school rank percentile` |
-| 繁星推薦第八類醫牙 | `100 - high-school rank percentile`; pre-interview screen |
+| 繁星推薦（第一至七類） | class-rank percentile and binding 學測 gates |
+| 繁星推薦第八類醫牙 | same measurements; pre-interview screen |
 | 個人申請 | National 學測 percentile at the last binding first-stage screen |
 
    For 分發, let `Q_i(p)` be subject `i`'s CEEC score at percentile `p`, then
@@ -116,29 +117,33 @@ model before estimating an entering-school median.
 
     sum(weight_i * Q_i(p)) = cutoff
 
-   This covers 12,225 of 12,656 rows. The 431 術科 rows retain their within-year
-   `norm` position. 第八類醫牙 stays on a separate pre-interview 繁星 path and
-   uses its final quota, not its screen count, as its weight. It shares the
-   ordinary 繁星 class-rank bridge but remains a separate aggregation path. 個申
-   drops non-binding screens and OCR failures. Both partial paths require a
-   same-year 分發 department match.
+   This covers 12,225 of 12,656 rows. It gives an equal-subject quantile
+   coordinate, not the percentile of the weighted total: CEEC does not publish
+   the joint subject scores needed for that distribution. The 431 術科 rows keep
+   their within-year `norm` position. 第八類醫牙 uses its final quota as its
+   weight and stays a separate path.
 
-3. Convert 分發 and 聯登 rows to seat-weighted midranks within `(year, path)`:
+3. Convert the full-cutoff routes to seat-weighted midranks within `(year, path)`:
 
     pct(r) = 100 * (seats below r + 0.5 * seats tied with r) / seats in G
 
-   繁星 and 個申 already use national percentiles. Fit bridges on matched
-   `(year, school, department)` rows, weighted by the smaller intake:
+   Fit one weighted, missing-data component over matched department-years:
 
-| Source path | Target | Fit |
-| --- | --- | --- |
-| 聯合登記分發 | 分發入學 | `uac = -15.11 + 0.7433 * tech` (`R² = 0.412`, `n = 315`) |
-| 繁星推薦（含第八類） | Provisional UAC rank | `rank = -55.64 + 1.5235 * star` (`R² = 0.715`, `n = 1,595`) |
-| 個人申請 | Provisional UAC rank | `rank = -12.02 + 1.0870 * apply` (`R² = 0.713`, `n = 1,078`) |
+    measurement = intercept_measurement + slope_type * component + residual
 
-   Fit the tech bridge on `norm` order; CEEC order raises leave-one-school-out
-   error from 11.60 to 12.63. Curve CEEC-ordered 分發 and bridged 聯登 together
-   by year, then map 繁星 and 個申 onto that reference.
+   The measurements are 分發, 聯登, class rank, three 繁星 gate families, and
+   three 個申 subject families. Repeated gates within one family collapse to its
+   strictest bar. Each type has equal total weight; rows within a type keep seat
+   weights. Families share a slope within each path and keep separate
+   intercepts. Alternating least squares fits the component and all lines
+   together. A row then uses its own calibrated measurements. This keeps
+   distinct application-group cutoffs distinct in the output.
+
+   Fit only department-years that link at least two paths; one-path rows cannot
+   calibrate a relationship. Current fit: 7,732 observations across 1,902
+   department-years and nine measurements; R² .872. Leave universities out,
+   compare each held path with its companion paths, and get RMSE .480 component
+   standard deviations.
 
 4. Aggregate each entity within path, then across paths:
 
@@ -155,8 +160,8 @@ headcounts on normalized department names and matches 2,407 of 3,040 rows.
 
 ## Caveats
 
-- The tech bridge has `R² = 0.412` across 315 matched department-years at six
-  universities. Treat close 科大 ranks as ties, especially near the top.
+- The tech bridge has only 315 matched department-years at six universities.
+  Treat close 科大 ranks as ties, especially near the top.
 - 個申 and 第八類醫牙繁星 publish screening-stage evidence, not final admitted
   cutoffs. 個申 seat counts use quota times the national fill rate. Adding these
   paths can therefore move well-covered non-medical departments relative to
@@ -170,9 +175,19 @@ headcounts on normalized department names and matches 2,407 of 3,040 rows.
 ## Experimental test-pool fit
 
 `python3 pool/fit.py` puts 學測, 統測, and 指考 on one original-cohort
-percentile axis for 110. Each exam has an independent two-segment continuous
+percentile axis for 110. Each exam has an independent three-segment continuous
 linear count density `q_e(x)`. Students may take any subset of the exams, so
-the three densities do not partition the cohort and need not sum to anything.
+the densities do not partition the cohort and need not sum to anything.
+
+統測 is three exams here rather than one. Its 共同科目數學 comes in papers
+數學(A)(B)(C)(S), one per 群, and nobody sits two, so a percentile inside 統測
+as a whole is a percentile inside a population that never sat together. The
+paper each 群 sits is not published in these tables; it is the assignment whose
+群 sizes reproduce all four paper totals in 108, 109 and 110 at once, within 55
+candidates of about 90,000, and `tests/test_tcte.py` holds it to that. 數學(S)
+ran to 110 and its 群 sat 數學(A) after, so those two share a pool. That leaves
+`tongce_a` (家政, 衛護, 藝術), `tongce_b` (商管, 外語, 餐旅, 設計, 農業, 食品,
+水產, 海事) and `tongce_c` (機械, 動力機械, 電機電子, 土木建築, 化工, 工程管理).
 
 For exam `e`, its density integrates to the observed number of test takers
 `N_e`:
@@ -185,28 +200,36 @@ The conversion finds the original-cohort percentile `x` satisfying
     integral_x^1 q_e(u) du = p * N_e
 
 The fit minimizes seat-weighted disagreement in `x` where the same department
-has thresholds from two exams. It uses 1,078 學測–指考, 45 統測–指考, and 418
-學測–統測 threshold pairs. The latter now include 110 四技日間部申請入學:
-the cutoff report supplies a weighted 學測 screen and the program workbook
-supplies its subject weights and quota. Of 518 joined rows, 441 have a binding
-screen and add 380 same-department 學測–統測 matches; with the prior 38, that
-bridge now has 418 pairs. They are bridge evidence only, not final admission
-cutoffs and not an added ranking path.
+has thresholds from two exams. It uses 1,171 學測–指考, 48 統測–指考, 594
+學測–統測, and 390 統測–統測 threshold pairs. That last kind is what the split
+buys: a department admitting from two 群 publishes two cutoffs against two
+different papers, which ties the three vocational densities to each other
+directly. Splitting also raises the 學測–統測 count from 419, because those two
+cutoffs used to average into one bar. On the same rows, the bridge the split
+targets improves — 學測–統測 disagreement falls from 14.59 to 13.88 points —
+while 學測–指考 gives up a little, 6.95 to 7.16, and the overall mean rises from
+8.20 to 8.44 on a pair set that is now a third larger and includes the harder
+statistics. The 學測–統測 pairs include 110 四技日間部申請入學: the cutoff report
+supplies a weighted 學測 screen and the program workbook supplies its subject
+weights and quota. Of 518 joined rows, 441 have a binding screen and carry most
+of that bridge. They are bridge evidence only, not final admission cutoffs and
+not an added ranking path.
 
-The two-line model has five shape parameters: two each for 學測 and 統測, and
-one for 指考. A three-step model needs six. 指考's density reaches zero at the
-top of the cohort, reflecting that a student who has already aced 學測 has no
-reason to take its second exam. Each exam's density is also capped at the
+Each density is a linear spline over three segments, and normalising it to its
+taker count spends one of the four ordinates, so the five exams carry 15 shape
+parameters between them. 指考 is held under 學測 at every ability rather than fit
+free, reflecting that it only sits students who already took 學測. Each exam's
+density is also capped at the
 academic-plus-vocational cohort size; otherwise an unconstrained fit can place
 more test takers at one ability level than there are students. On all current
 thresholds, direct percentile transfer has 18.63 mean absolute disagreement and
-the constrained linear fit has 7.76 points. This is an in-sample diagnostic;
+the constrained linear fit has 8.44 points. This is an in-sample diagnostic;
 additional years will be the meaningful held-out check.
 
 `python3 pool/fit.py` reports the fit and writes `pool-densities.png`. The left
-panel shows all three count densities, including the new 統測 curve, and the
-right panel shows their conversions from within-exam rank to original-cohort
-percentile. `python3 -m pool.plot` redraws the PNG without the text report.
+panel shows the five count densities and the right panel shows their conversions
+from within-exam rank to original-cohort percentile. `python3 -m pool.plot`
+redraws the PNG without the text report.
 
 ## Experimental noisy-measurement fit
 
@@ -231,18 +254,22 @@ would otherwise buy agreement for nothing.
 
 Two caveats. Without a school layer, `λ` for class rank absorbs between-school
 variance as noise, so it reads as a lower bound and stronger schools feeding
-stronger departments would bias it. And on the real bars every loading fits near
-1, class rank lowest at 0.95 — the ordering the model predicts, at a magnitude
-saying the gates do not yet pin it hard. The fit does recover a planted loading
-on generated bars, so that number is the data talking, not the estimator.
+stronger departments would bias it. And the fit stops at its 60-step cap rather
+than at a converged point, so treat the loadings as a reading, not a settled
+number. On 4,752 pairs they come out 指考 0.999, 學測 0.993, 在校排名 0.944 and
+統測 0.853, with 8.14 points of disagreement left. Splitting 統測 is what moves
+that loading: three pools tied by departments admitting through two 群 give the
+fit somewhere to put the vocational disagreement other than everyone's ability.
+The fit does recover a planted loading on generated bars, so these numbers are
+the data talking, not the estimator.
 
 `python3 -m pool.diagnose` prints the same fit department by department, each one
 read twice: once with every bar exact, once under the fitted loadings. Across
-2,432 departments the loadings move a level by 0.49 points on average and 9.08 at
-most, and mean disagreement between a department's paths falls from 12.95 points
-to 12.60. It also ranks what the 檢定 gates add to a 繁星 rank bar, which reaches
-18.6 points where a loose rank bar sits behind strict gates. That lift is the
-evidence the loadings are fitted from.
+2,432 departments the loadings move a level by 1.05 points on average and 10.03
+at most, and mean disagreement between a department's paths falls from 13.52
+points to 12.95. It also ranks what the 檢定 gates add to a 繁星 rank bar, which
+reaches 19.2 points where a loose rank bar sits behind strict gates. That lift is
+the evidence the loadings are fitted from.
 
 ## Sources
 
@@ -347,10 +374,11 @@ Run commands from the repository root. Install Python packages with
     python3 -m parse.cap          # 107 CAP categories -> data/cap-grade-distributions.tsv
     python3 -m parse.entry        # 107 基北 cutoffs -> data/high-school-entry-cutoffs.tsv
     python3 rank_uac.py        # all paths, bridge, gender -> rankings/rank-*.tsv
+    python3 plot_relationships.py  # bridge evidence -> rankings/test-relationships.png
     python3 pool/fit.py        # joint fit report + pool-densities.png
     python3 -m pool.plot       # redraw only pool-densities.png
-    python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~40s
-    python3 -m pool.diagnose   # the same fit, department by department, ~40s
+    python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~2min
+    python3 -m pool.diagnose   # the same fit, department by department, ~2min
     python3 -m unittest
 
 Both CAC fetchers take the schools named in their `WANT` list, or every school
