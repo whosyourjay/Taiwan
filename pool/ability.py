@@ -32,8 +32,12 @@ def curves():
     """The ability curves, bootstrapped from the first-pass ranking."""
     rows, _ = pool_fit.observations()
     order, schools = tiling.ranked()
-    placed = tiling.seats_in_order(rows, order, schools, tiling.grouped())
-    points, _ = tiling.tile(placed)
+    filled = tiling.admitted(pool_fit.YEAR)
+    groups = tiling.grouped()
+    scales = tiling.path_scales(
+        tiling.placed_rows(rows, order, schools, groups), filled)
+    placed = tiling.seats_in_order(rows, order, schools, groups, scales)
+    points, _ = tiling.tile(placed, tiling.cohort_size(pool_fit.YEAR, filled=filled))
     return rows, tiling.splines(points)
 
 

@@ -24,16 +24,32 @@ from scipy import interpolate
 
 import rank_uac
 from lib import tsvio
-from lib.paths import ranking_path
+from lib.paths import data_path, ranking_path
 from pool import fit as pool_fit
 
 RANKING = "rank-departments.tsv"
 GROUPS = "rank-application-groups.tsv"
+CAP = "cap-grade-distributions.tsv"
+TOTALS = "admission-totals.tsv"
+
+# 國中教育會考 sits at the end of 9th grade and its takers reach university three
+# years later. Practically the whole age group sits it, so its headcount stands
+# in for a census of one cohort — births less a negligible number of deaths.
+CAP_LEAD = 3
+
+# Admitted through routes that publish no bar we can place. Leaving them in the
+# cohort would seat them below every scored department, which is wrong for
+# 特殊選才 above all, so they come out of the denominator instead.
+UNPLACED_PATHS = ("special", "other")
 
 # 分發 and 統測登記分發 publish a cutoff for every 系組, so each one can be placed
 # on its own. 繁星 and 個申 publish one cutoff per department, and splitting their
 # seats would scatter them along the axis under a bar that never moved.
 PER_GROUP = ("uac", "tech")
+
+# 四技二專甄選入學 is one path that the seat tables and the totals table spell
+# differently.
+TOTAL_NAMES = {"tech_apply": "tech_select"}
 
 # Places where the smoothed curve is pinned. Thousands of bars carry far less
 # shape than that, and a consumer reading the curve pays for every one of them.
@@ -62,25 +78,73 @@ def grouped(source=GROUPS):
             for row in tsvio.read_rows(ranking_path(source))}
 
 
-def seats_in_order(rows, order, schools, groups=None):
-    """Department-paths from the best down, each at the finest rank it has.
+def admitted(year, totals=TOTALS):
+    """How many seats each path really filled in `year`, from the totals table."""
+    return {row["path"]: float(row["admitted"])
+            for row in tsvio.read_rows(data_path(totals))
+            if row["year"] == str(year)}
+
+
+def placed_rows(rows, order, schools, groups=None):
+    """Every row the tiling can place, as ``(row, ranking score, exam)``.
 
     A seat occupies ability whether or not its bar can be read, so 繁星 belongs
     here even though its cutoff is a rank inside one school.
     """
     groups = groups or {}
-    out = []
     for row in rows:
         exam = pool_fit.exam_of(row)
         key = (row["school"], row["dept"])
         score = order.get(key, schools.get(row["school"]))
         if row["path"] in PER_GROUP:
             score = groups.get((*key, row.get("application_group")), score)
-        if exam is None or score is None:
-            continue
-        out.append((score, exam, pool_fit.top_of(row), float(row["seats"])))
+        if exam is not None and score is not None:
+            yield row, score, exam
+
+
+def path_scales(placed, filled):
+    """What to multiply a path's held seats by to reach its published intake.
+
+    We hold every 分發 seat but only three quarters of 個申 and a fifth of 四技
+    甄選. Against a cohort denominator the seats we are missing would all sit at
+    the bottom of the axis, below every department, which is the one place they
+    certainly do not belong. Scaling each held seat up to its path's real intake
+    puts them back at the abilities that path admits at, under the assumption
+    that what we hold is a fair sample of what we do not.
+    """
+    held = collections.defaultdict(float)
+    for row, _, _ in placed:
+        held[row["path"]] += float(row["seats"])
+    out = {}
+    for path, seats in held.items():
+        total = filled.get(TOTAL_NAMES.get(path, path))
+        out[path] = total / seats if total and seats else 1.0
+    return out
+
+
+def seats_in_order(rows, order, schools, groups=None, scales=None):
+    """Department-paths from the best down, each at the finest rank it has."""
+    scales = scales or {}
+    out = [(score, exam, pool_fit.top_of(row),
+            float(row["seats"]) * scales.get(row["path"], 1.0))
+           for row, score, exam in placed_rows(rows, order, schools, groups)]
     out.sort(key=lambda item: -item[0])
     return out
+
+
+def cohort_size(year, cap=CAP, filled=None):
+    """Everyone competing for a placeable seat in `year`, or None if unknown.
+
+    None leaves the axis normalised to the seats in hand, which reads the
+    weakest department as the weakest student in the country.
+    """
+    wanted = str(int(year) - CAP_LEAD)
+    sat = sum(float(row["students"]) for row in tsvio.read_rows(data_path(cap))
+              if row["year"] == wanted)
+    if not sat:
+        return None
+    filled = admitted(year) if filled is None else filled
+    return sat - sum(filled.get(path, 0.0) for path in UNPLACED_PATHS)
 
 
 def tile(placed, total=None):
@@ -260,9 +324,12 @@ def report(points, fitted, total, held):
 def main():
     rows, _ = pool_fit.observations()
     order, schools = ranked()
-    placed = seats_in_order(rows, order, schools, grouped())
+    filled = admitted(pool_fit.YEAR)
+    groups = grouped()
+    scales = path_scales(placed_rows(rows, order, schools, groups), filled)
+    placed = seats_in_order(rows, order, schools, groups, scales)
     held = sum(seats for *_, seats in placed)
-    points, total = tile(placed)
+    points, total = tile(placed, cohort_size(pool_fit.YEAR, filled=filled))
     fitted = curves(points)
     report(points, fitted, total, held)
     shares, _ = seat_shares(placed)

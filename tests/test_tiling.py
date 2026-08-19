@@ -252,6 +252,24 @@ class TestFuzz(unittest.TestCase):
             self.assertAlmostEqual(min(levels), 0.0)
             self.assertAlmostEqual(total, sum(s for *_, s in placed))
 
+    def test_scaling_lifts_every_path_onto_its_published_intake(self):
+        rng = np.random.default_rng()
+        paths = ("uac", "apply", "star", "tech_apply")
+        for _ in range(int(rng.integers(1, 100))):
+            placed = [({"path": str(rng.choice(paths)),
+                        "seats": float(rng.integers(1, 500))}, 0.0, "gsat")
+                      for _ in range(int(rng.integers(1, 40)))]
+            filled = {tiling.TOTAL_NAMES.get(p, p): float(rng.integers(1, 90000))
+                      for p in paths}
+            scales = tiling.path_scales(placed, filled)
+            seated = collections.defaultdict(float)
+            for row, _, _ in placed:
+                seated[row["path"]] += row["seats"] * scales[row["path"]]
+            for path, got in seated.items():
+                self.assertAlmostEqual(
+                    got, filled[tiling.TOTAL_NAMES.get(path, path)], places=6
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
