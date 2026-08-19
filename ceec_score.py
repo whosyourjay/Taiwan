@@ -73,6 +73,20 @@ def midranks(counts):
     return values, percentiles
 
 
+def midrank_top(counts, level):
+    """Share of a distribution above a bar, splitting the bar's own bucket.
+
+    A 級分 is a bucket rather than a point, so the candidate sitting exactly on
+    a bar is in the middle of everyone who scored it rather than above all of
+    them. This is `midranks` read at one value from the top.
+    """
+    total = sum(counts.values())
+    if not total:
+        return None
+    above = sum(n for score, n in counts.items() if score > level)
+    return (above + counts.get(level, 0.0) / 2) / total
+
+
 def interpolate(xs, ys, x):
     """Linear interpolation, held constant beyond the observed endpoints."""
     i = bisect.bisect_right(xs, x)
@@ -171,7 +185,7 @@ class CohortPercentiles:
             return cls(csv.DictReader(f, delimiter="\t"))
 
     def top_fraction(self, year, label, level):
-        """Share of the cohort scoring at or above `level` on `label`, or None.
+        """Share of the cohort above `level` on `label`, at midrank, or None.
 
         None means the label named a subject set with no published distribution,
         which is currently only 英聽 — reported as bands, not 級分.
@@ -182,8 +196,7 @@ class CohortPercentiles:
         counts = self.counts.get((str(year), "、".join(subjects)))
         if not counts:
             return None
-        total = sum(counts.values())
-        return sum(n for score, n in counts.items() if score >= float(level)) / total
+        return midrank_top(counts, float(level))
 
     def gate_top_fractions(self, year, gates):
         """Shares of 學測 takers that clear each binding gate in a string."""

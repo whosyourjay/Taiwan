@@ -58,10 +58,10 @@ class TestCohortPercentiles(unittest.TestCase):
             rows("114", "國文", [(15, 10), (14, 30), (13, 60)])
         )
 
-    def test_share_at_or_above_the_bar(self):
-        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 15), 0.1)
-        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 14), 0.4)
-        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 13), 1.0)
+    def test_share_above_the_bar_splits_its_own_bucket(self):
+        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 15), 0.05)
+        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 14), 0.25)
+        self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 13), 0.70)
 
     def test_unknown_subject_or_year_is_none(self):
         self.assertIsNone(self.cohort.top_fraction("114", "英聽", 5))
@@ -75,11 +75,11 @@ class TestCohortPercentiles(unittest.TestCase):
         got = self.cohort.strictest_gate_percentile(
             "114", "國文頂標15 國文前標14 英聽頂標5"
         )
-        self.assertAlmostEqual(got, 0.9)
+        self.assertAlmostEqual(got, 0.95)
 
     def test_binding_gates_retain_the_subject(self):
         got = self.cohort.binding_gates("114", "國文頂標15 英聽頂標5")
-        self.assertEqual(got, [("國文", 0.1)])
+        self.assertEqual(got, [("國文", 0.05)])
 
     def test_no_recognised_gate_has_no_gate_coordinate(self):
         self.assertEqual(self.cohort.strictest_gate_percentile("114", "英聽頂標5"), 0.0)
