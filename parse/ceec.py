@@ -16,6 +16,10 @@ distribution of every multi-subject total. Reading a 國英數自 sum off that t
 needs no assumption about how the subjects correlate, unlike inferring one
 subject at a time. Those totals arrive as subjects named `國文、英文、數學、自然`.
 
+Before 108 every candidate sat all five subjects, so CEEC published one
+五科總級分人數統計表 instead of the combination set. It reads as the five-subject
+member of that same family, which puts both eras behind one lookup.
+
 Output columns: year exam subject score seats, where `seats` is the number of
 candidates scoring in that bin.
 """
@@ -34,7 +38,14 @@ MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
 # for now, which covers 108-112; widening it needs deduplication first.
 GSAT = "ceec/xuece/*各科級分人數分布表*.xls"
 GSAT_COMBO = "ceec/xuece/*2至4科不同科目組合級分人數分布表*.xls"
+GSAT_TOTAL = "ceec/xuece/*總級分人數統計表*.xls"
 YEARS = range(108, 115)
+# The five-subject total stops where the combination tables start, so the two
+# never describe the same year and no total is counted twice.
+TOTAL_YEARS = range(95, 108)
+# Written the way split_subjects spells 國英數社自, so one lookup serves both eras.
+TOTAL_SUBJECT = "、".join(("國文", "英文", "數學", "社會", "自然"))
+TOTAL_MAX = 75
 
 
 def cell(row, i):
@@ -97,6 +108,28 @@ def read_marks(sheet):
                 yield subject, score, count
 
 
+def read_totals(sheet):
+    """五科總級分 layout: one row per total, its candidate count beside it.
+
+    The trailing columns cumulate the same counts, and the header names them in
+    text, so reading the first two columns of every numeric row is enough.
+    """
+    for r in range(sheet.nrows):
+        row = sheet.row_values(r)
+        score = number(cell(row, 0))
+        count = number(cell(row, 1))
+        if score is None or count is None or not 0 <= score <= TOTAL_MAX:
+            continue
+        yield TOTAL_SUBJECT, score, count
+
+
+def reader_for(name):
+    """Which of the three layouts a statistics workbook is written in."""
+    if "總級分" in name:
+        return read_totals
+    return read_grades if "級分" in name else read_marks
+
+
 def exam_of(path):
     """Which exam, and on which scale, a statistics file reports.
 
@@ -115,13 +148,14 @@ def exam_of(path):
 def parse(path):
     import xlrd
 
-    year = re.match(r"(\d+)", os.path.basename(path)).group(1)
-    if int(year) not in YEARS:
+    name = os.path.basename(path)
+    year = re.match(r"(\d+)", name).group(1)
+    reader = reader_for(name)
+    if int(year) not in (TOTAL_YEARS if reader is read_totals else YEARS):
         return []
     # The 學測 combination tables split 2科/3科/4科 across sheets; every other
     # workbook holds one.
     book = xlrd.open_workbook(path)
-    reader = read_grades if "級分" in os.path.basename(path) else read_marks
     exam = exam_of(path)
     return [(year, exam, s, score, n)
             for sheet in book.sheets()
@@ -130,7 +164,7 @@ def parse(path):
 
 def main(out_path):
     rows = []
-    for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO):
+    for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO, GSAT_TOTAL):
         for source in sorted(glob.glob(repo_path(pattern))):
             got = parse(source)
             if got:
