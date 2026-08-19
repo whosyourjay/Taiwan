@@ -5,6 +5,8 @@ a bachelor student. Nothing here reflects research output or reputation.
 
 Covers both admission systems, on one scale: 141 institutions, 3,040 departments.
 
+Known limitations and planned work live in `TODO.md`.
+
 ## Admission paths
 
 For scale, 114學年度 had 121,181 學測 takers and 66,311 統測 takers; 39,190
@@ -74,10 +76,7 @@ ability. The source is a third-party historical compilation, so rows carry
 
 `data/cap-grade-distributions.tsv` holds MOE's national 107 counts for each
 five-subject A/B/C category. It supports later conversion of entrance results
-to national rank intervals. It cannot yet map a plus-mark cutoff such as 33.8
-to an exact percentile, because MOE does not publish the needed joint
-five-subject-plus distribution. We need district intake counts and a choice
-model before estimating an entering-school median.
+to national rank intervals.
 
 - `score` — 0-100 difficulty percentile among usable rows, combined across
   paths by average annual admitted seats.
@@ -154,25 +153,47 @@ model before estimating an entering-school median.
    `seats_avg` is `sum(annual_seats_j)`. Years weight rows within a path, not the
    path itself.
 
-`data/admission-totals.tsv` reports unscored coverage gaps; it does not change the
-denominator. Gender also does not affect `score`; `gender.py` joins MOE bachelor
-headcounts on normalized department names and matches 2,407 of 3,040 rows.
+`data/admission-totals.tsv` reports unscored coverage gaps here; the ranking's
+denominator is the seats it holds. The ability pool below does use those totals.
+Gender also does not affect `score`; `gender.py` joins MOE bachelor headcounts on
+normalized department names and matches 2,407 of 3,040 rows.
 
-## Caveats
+## Ability pool
 
-- The tech bridge has only 315 matched department-years at six universities.
-  Treat close 科大 ranks as ties, especially near the top.
-- 個申 and 第八類醫牙繁星 publish screening-stage evidence, not final admitted
-  cutoffs. 個申 seat counts use quota times the national fill rate. Adding these
-  paths can therefore move well-covered non-medical departments relative to
-  medical departments.
-- CEEC publishes marginal subject distributions. The 分發 conversion assumes
-  one percentile across every selected subject; it cannot recover the admitted
-  student's actual subject-score vector.
-- Percentiles use only validated named rows. Missing routes and rejected rows
-  appear in the coverage audit but not the score denominator.
+`python3 -m pool.ability` scores every department by the ability its own
+thresholds imply, and is the live model. It reads each exam's curve off the
+ranking rather than fitting a density. Every admit takes one seat, so walking
+`rankings/rank-departments.tsv` from the best department down and adding up seats
+says where a department's admits sit in the pool. Its published cutoff already
+says where its marginal admit sits among its own exam's takers, and the two
+together are one point on that exam's curve. `pool/tiling.py` pools those points
+at each distinct bar, makes the result fall with isotonic regression, and fits a
+shape-preserving cubic through ten seat-weighted knots.
+
+The axis runs over an age cohort rather than over the seats in hand.
+`data/cap-grade-distributions.tsv` counts everyone who sat 國中教育會考, which
+practically the whole age group does three years before university entry, so it
+stands in for a census. 特殊選才 and 其他管道 publish no bar we can place, so they
+come out of that denominator instead of being seated below every department.
+
+We hold every 分發 seat but only three quarters of 個申 and a fifth of 四技甄選.
+Left alone those missing seats would all sit at the bottom of the axis, so
+`path_scales` lifts each path's held seats onto its published intake from
+`data/admission-totals.tsv`. `python3 -m pool.coverage` prints that comparison
+path by path. What remains below the weakest department is the 32% of the age
+group holding no placeable seat.
+
+`python3 -m pool.percentile YEAR SUBJECTS SCORE` runs one 學測 total through the
+same two steps a department's cutoff goes through: the published distribution
+says what share of takers it beats, and that exam's curve says what that share is
+worth in the pool. A candidate sitting exactly on a bar counts as the middle of
+everyone who scored it, which is the convention `ceec_score.midrank_top` applies
+to department bars and 繁星 gates alike.
 
 ## Experimental test-pool fit
+
+The tiling above superseded this. `pool/complement.py` still holds the density
+fit, and nothing in the ability pool calls it.
 
 `python3 pool/fit.py` puts 學測, 統測, and 指考 on one original-cohort
 percentile axis for 110. Each exam has an independent three-segment continuous
@@ -223,8 +244,7 @@ density is also capped at the
 academic-plus-vocational cohort size; otherwise an unconstrained fit can place
 more test takers at one ability level than there are students. On all current
 thresholds, direct percentile transfer has 18.63 mean absolute disagreement and
-the constrained linear fit has 8.44 points. This is an in-sample diagnostic;
-additional years will be the meaningful held-out check.
+the constrained linear fit has 8.44 points.
 
 `python3 pool/fit.py` reports the fit and writes `pool-densities.png`. The left
 panel shows the five count densities and the right panel shows their conversions
@@ -252,11 +272,7 @@ over ability. The cost is squared disagreement over the variance of the levels
 it produced, because shrinking every `λ` at once pulls the levels together and
 would otherwise buy agreement for nothing.
 
-Two caveats. Without a school layer, `λ` for class rank absorbs between-school
-variance as noise, so it reads as a lower bound and stronger schools feeding
-stronger departments would bias it. And the fit stops at its 60-step cap rather
-than at a converged point, so treat the loadings as a reading, not a settled
-number. On 4,752 pairs they come out 指考 0.999, 學測 0.993, 在校排名 0.944 and
+On 4,752 pairs the loadings come out 指考 0.999, 學測 0.993, 在校排名 0.944 and
 統測 0.853, with 8.14 points of disagreement left. Splitting 統測 is what moves
 that loading: three pools tied by departments admitting through two 群 give the
 fit somewhere to put the vocational disagreement other than everyone's ability.
@@ -375,6 +391,10 @@ Run commands from the repository root. Install Python packages with
     python3 -m parse.entry        # 107 基北 cutoffs -> data/high-school-entry-cutoffs.tsv
     python3 rank_uac.py        # all paths, bridge, gender -> rankings/rank-*.tsv
     python3 plot_relationships.py  # bridge evidence -> rankings/test-relationships.png
+    python3 -m pool.ability    # ability curves -> rankings/ability-*.tsv
+    python3 -m pool.tiling     # the curves themselves + tiling.png
+    python3 -m pool.coverage   # seats held against published intake, by path
+    python3 -m pool.percentile 103 國英數社自 65   # one 學測 total, ranked
     python3 pool/fit.py        # joint fit report + pool-densities.png
     python3 -m pool.plot       # redraw only pool-densities.png
     python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~2min

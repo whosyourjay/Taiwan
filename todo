@@ -1,11 +1,14 @@
-A lot of tsv landing at top level
+Better data source for these png files
+Tongce and xuece curved percentiles are biased because students who take zhikao do not appear in university seats
+Fenfa / zhikao scores are currently just use 1-subtest scores. They should be polarized slightly to account for correlation <1.
 Total population of students in a year. Let's just use admitted student body and we can as a super-final step add a chunk at the bottom for people who don't go to college.
-學測 for all other years
+Xuece for all other years
+Better way to handle class + xuece
+  Class rank appears too high because some people don't go to college. Add this lower bound to the other tests.
 
 Fix art ranking. E.g. rank schools on individual exams somehow, or rank by groups that share the same set of exams.
 
-- This should be handled year-by-year. We should build an estimate of student percentile across the 2-4 test types we're using, then assign a final percentile to the admit track. Then when we pool across years, tracks, or departments we take a weighted average.
-- Parameters shared across year and track in the bridging formula should be the only connection between years
+Completely separate analysis by year, only combine percentile at the end
 
 其他管道 - Mixture of IMO/IOI and sports
   Quantify the fractions here
@@ -22,22 +25,12 @@ High schools
   科學班
 
 
-We also don't know the correlation between subtests or the count for people who took different subsets. They are likely correlated around 0.85 but we are going to effectively treat it as 1.0. This is what the ceec_score.formula_percentile does.
-
-As a followup, we count try to simulate a correlation between high school GPA and xuece. Or we could simulate different means and sds at different high schools on xuece combining with the cutoff.
-
-This is important because it's 50% of admits.
+As a followup, we could try to simulate a correlation between high school GPA and xuece. Or we could simulate different means and sds at different high schools on xuece combining with the cutoff.
 
 
-學測 rescaled to 60 points - Does this "reveal" the student count at the 4 levels between a previous whole number?
-a gate resolves to one of 5 buckets - what is a gate? bucket?
+In ceec_score.py, add a lookup keyed on (year, subject-set, level) returning the cohort percentile, with the abbreviation map (國英數自 → 國文、英文、數學、自然) since CAC prints both spellings. Then in parse_apply.py or load_apply(), set basis from that instead of norm — keeping norm in the TSV so the existing bridge stays reproducible and the two can be compared.
 
-  In ceec_score.py, add a lookup keyed on (year, subject-set, level) returning the cohort percentile, with the abbreviation map (國英數自 → 國文、英文、數學、自然) since CAC
-  prints both spellings. Then in parse_apply.py or load_apply(), set basis from that instead of norm — keeping norm in the TSV so the existing bridge stays reproducible and the
-  two can be compared.
-
-  That's a real ranking change, not a refactor, so I'd rather you call it: swap apply onto the percentile basis, or land the lookup first and diff the two rankings before
-  committing to it?
+That's a real ranking change, not a refactor, so I'd rather you call it: swap apply onto the percentile basis, or land the lookup first and diff the two rankings before committing to it?
   --- Can you explain all this with some nice diagrams?
 
 
@@ -58,7 +51,7 @@ Consider the following model: all measurements have some underlying correlation 
   - 學測個申: 65,453 passed stage 1; 44,025 were finally allocated — about 67%.
   - 統測甄選: 36,800 passed stage 1; 27,839 received at least one 正/備取 qualification — about 76%; 24,421 were finally allocated — about 66%.
 
-The apparent contradiction is that a department normally screens about 3× its quota, while each student applies to several departments. A candidate can pass some screens even if they fail others.
+a department normally screens about 3× its quota, while each student applies to several departments
 
 24 matched 第八類 department-years.
   - 562 students passed the published screen.
@@ -66,7 +59,6 @@ The apparent contradiction is that a department normally screens about 3× its q
 
 The interviews for 統測 and 學測 are somewhere between 1.5x and 3x filters. Although a student might still end up at the school they want, they might get pushed to a worse department. I don't have a good way to handle this.
 
-Sounds great in theory but is it realistic to implement? Will the runtime be reasonable? Will it converge? Do we have enough datapoints to avoid overfitting?
 
 繁星 rank is within-school. The published cutoff is one national class-rank bar applied inside every nominating school, so the admitted set is a mixture over school means μ_s. That's a second
   quadrature
@@ -76,3 +68,14 @@ Sounds great in theory but is it realistic to implement? Will the runtime be rea
     第八類 department-years earning their keep. ---- Same here, just treat these as thresholds for now, add to the note above about how to correct it. ---- A free spline density and a loading are
   near-degenerate: both compress implied levels toward the middle, and only the specific inverse-Mills shape separates them. Pin participation first —
     pool/complement.py's cohort-share constraint is exactly the right kind — and λ becomes identifiable. --- ok so pin a few parameters to make this correct?
+
+But xuece does break down to a specific list of tests. So we could split xuece into several orderings if we wanted. Actually we could split either one arbitrarily by clustering the list of subjects/weights and picking 2-3 clusters.
+
+Before adding that output, make the ranking input year-specific: the 110 curve should use the 110 department order, not today’s 108–114 aggregate. Then:
+
+1. Freeze that 110 order.
+2. Place all 110 seats along it (繁星 seats occupy space but do not define a test curve).
+3. Smooth each exam’s cutoff-percentile → ability-percentile curve.
+4. Map UAC/統測/個申 bars through it; aggregate those mapped values to departments and universities.
+
+A large share of 學測 takers end up with no placeable seat: they apply and miss, take a 專科 place, repeat the year
