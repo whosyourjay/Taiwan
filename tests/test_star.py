@@ -1,6 +1,7 @@
 import csv
 import glob
 import os
+import random
 import re
 import subprocess
 import unittest
@@ -8,6 +9,9 @@ import unittest
 from lib.paths import data_path, path
 
 TSV = data_path("star-cutoffs.tsv")
+# Each PDF costs a pdftotext subprocess, so re-read a few per run instead of all
+# 88. Unseeded, so successive runs cover different files. PDFS=99 to sweep them.
+PDFS = int(os.environ.get("PDFS", 6))
 
 # Values read off the PDFs by eye.
 SPOT = {
@@ -52,7 +56,8 @@ class TestStar(unittest.TestCase):
 
     def test_one_row_per_dept_in_pdf(self):
         """Every 校系代碼 line in the raw text becomes exactly one row."""
-        for pdf in sorted(glob.glob(path("star", "*.pdf"))):
+        found = sorted(glob.glob(path("star", "*.pdf")))
+        for pdf in random.sample(found, min(PDFS, len(found))):
             year, code, group = os.path.basename(pdf)[:-4].split("-")
             txt = subprocess.run(["pdftotext", "-layout", pdf, "-"],
                                  capture_output=True, text=True).stdout

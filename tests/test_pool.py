@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from parse import tcte
 from pool import complement
@@ -391,6 +392,7 @@ class TestPlotCommand(unittest.TestCase):
 
 
 class TestDirectCommand(unittest.TestCase):
+    @pytest.mark.slow
     def test_fit_script_runs_from_its_file_path(self):
         got = subprocess.run(
             [sys.executable, os.path.join(ROOT, "pool", "fit.py")],

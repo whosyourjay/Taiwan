@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import pytest
 from scipy import special
 
 from pool import bars, complement, factor, model
@@ -287,6 +288,7 @@ class TestRecovery(unittest.TestCase):
         self.assertLess(float(np.abs(left - right).max()), 1e-6)
         self.assertAlmostEqual(factor.cost(packed, pool), 0.0, places=10)
 
+    @pytest.mark.slow
     def test_it_recovers_a_loading_the_bars_actually_carry(self):
         observations = consistent_pairs(self.TRUTH, levels=5, nodes=self.NODES)
         fitted, error = factor.fit(observations, SIZES, 2, nodes=self.NODES, steps=30)
