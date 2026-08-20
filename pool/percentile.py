@@ -7,15 +7,14 @@ it beats, and that exam's curve says what that share is worth in the pool.
 """
 
 import functools
-import os
 import sys
 
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
-import ceec_score
 from lib.paths import data_path
 from pool import ability
+from rank import ceec_score
 
 EXAM = "gsat"
 

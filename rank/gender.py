@@ -12,7 +12,7 @@ import csv
 import os
 import urllib.request
 
-from deptname import key
+from lib.deptname import key
 
 HERE = os.path.dirname(__file__)
 CSV = os.path.join(HERE, "moe", "{year}_students.csv")

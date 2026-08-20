@@ -1,11 +1,10 @@
 """Tests for the 學測 cohort percentiles and the paths that depend on them."""
 
-import collections
 import random
 import unittest
 
-import ceec_score
-import rank_uac
+from rank import ceec_score
+from rank import uac
 from lib import tsvio
 from lib.paths import data_path
 
@@ -136,10 +135,10 @@ class TestAbsolutePathsIgnoreTheSample(unittest.TestCase):
         return base + [dict(r) for r in extra]
 
     def curve_all(self, rows):
-        rank_uac.curve([r for r in rows if r["path"] not in rank_uac.ABSOLUTE],
+        uac.curve([r for r in rows if r["path"] not in uac.ABSOLUTE],
                        "basis", "pct", lambda r: (r["year"], r["path"]))
         for row in rows:
-            if row["path"] in rank_uac.ABSOLUTE:
+            if row["path"] in uac.ABSOLUTE:
                 row["pct"] = row["basis"]
 
     def test_absolute_basis_passes_through_untouched(self):

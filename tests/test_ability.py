@@ -1,6 +1,5 @@
 """Tests for scoring departments by the ability their thresholds imply."""
 
-import collections
 import unittest
 
 import numpy as np

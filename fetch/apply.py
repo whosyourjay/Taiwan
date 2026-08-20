@@ -12,9 +12,9 @@ import sys
 import time
 
 from fetch.star import WANT, colleges, get
-from lib.paths import path
+from lib.paths import path, source_path
 
-OUT = path("apply")
+OUT = source_path("apply")
 
 BASE = "https://www.cac.edu.tw/cacportal/apply_his_report"
 

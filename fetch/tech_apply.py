@@ -4,7 +4,7 @@ import os
 import sys
 
 from fetch.ceec import get
-from lib.paths import path
+from lib.paths import path, source_path
 
 
 BASE = "https://www.jctv.ntut.edu.tw/downloads"
@@ -21,10 +21,10 @@ def urls(year):
 
 
 def main():
-    os.makedirs(path("tech"), exist_ok=True)
+    os.makedirs(source_path("tech"), exist_ok=True)
     for kind, url in urls(YEAR).items():
         extension = url.rsplit(".", 1)[-1]
-        target = path("tech", f"jctv-{YEAR}-xuece-{kind}.{extension}")
+        target = source_path("tech", f"jctv-{YEAR}-xuece-{kind}.{extension}")
         if os.path.exists(target):
             print(f"exists  {target}", file=sys.stderr)
             continue

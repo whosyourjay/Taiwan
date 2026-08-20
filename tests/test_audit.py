@@ -2,7 +2,7 @@
 
 import unittest
 
-from audit_apply import classify
+from rank.audit import classify
 
 
 def row(college="甲大學", code="001001"):

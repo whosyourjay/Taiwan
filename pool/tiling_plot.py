@@ -11,10 +11,10 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (after the backend is fixed)
 
-from lib.paths import path  # noqa: E402
+from lib.paths import figure_path  # noqa: E402
 from pool.plot import FONTS, STYLE  # noqa: E402
 
-OUT = path("tiling-curves.png")
+OUT = figure_path("tiling-curves.png")
 
 
 def draw(points, fitted, smoothed, shares, total, out=OUT):

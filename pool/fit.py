@@ -6,19 +6,16 @@ gap between the abilities they imply is the error to minimise.
 """
 
 import collections
-import os
 import sys
 
-# A file invocation puts pool/, rather than the repository root, on sys.path.
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
-import ceec_score
-import rank_uac
 from lib import tsvio
 from lib.paths import data_path
 from parse import tcte
 from pool import complement, model
+from rank import ceec_score, uac
 
 # 110 is the year every school was collected for, and the last year 分發入學 ran
 # purely on 指考 — from 111 its formulas mix in 學測 subjects.
@@ -93,10 +90,10 @@ def load_tech_apply(distributions):
             row["year"], row["subjects"], row["cutoff"]
         )
         top = None if percentile is None else 1.0 - percentile
-        if row["year"] != YEAR or top is None or top >= rank_uac.NON_BINDING:
+        if row["year"] != YEAR or top is None or top >= uac.NON_BINDING:
             continue
         row["system"], row["path"] = "tech", "tech_apply"
-        rank_uac.identify_department(row)
+        uac.identify_department(row)
         row["seats"] = int(row["seats"])
         row["ceec_percentile"] = percentile
         rows.append(row)
@@ -146,7 +143,7 @@ def report(pool_fit, observations, error):
 def source_rows():
     """Load only the admission rows that provide national percentile bars.
 
-    This intentionally avoids ``rank_uac.build_rows()``. Pool fitting needs raw
+    This intentionally avoids ``uac.build_rows()``. Pool fitting needs raw
     thresholds, not the department-ranking bridge, so unrelated ranking paths
     cannot change this experimental input.
     """
@@ -154,15 +151,15 @@ def source_rows():
         data_path("ceec-scores.tsv"), data_path("tongce-scores.tsv")
     )
     cohort = ceec_score.CohortPercentiles.load(data_path("ceec-scores.tsv"))
-    uac_rows = list(rank_uac.load("uac", distributions))
-    tech_rows = list(rank_uac.load("tech", distributions))
-    rank_uac.unify_spelling(uac_rows + tech_rows)
+    uac_rows = list(uac.load("uac", distributions))
+    tech_rows = list(uac.load("tech", distributions))
+    uac.unify_spelling(uac_rows + tech_rows)
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
-    apply_rows = rank_uac.joinable(list(rank_uac.load_apply(cohort)), known)
-    star_rows = rank_uac.joinable(list(rank_uac.load_star(cohort=cohort)), known)
+    apply_rows = uac.joinable(list(uac.load_apply(cohort)), known)
+    star_rows = uac.joinable(list(uac.load_star(cohort=cohort)), known)
     tech_apply = load_tech_apply(distributions)
     rows = uac_rows + tech_rows + apply_rows + star_rows + tech_apply
-    rank_uac.unify_spelling(rows)
+    uac.unify_spelling(rows)
     return rows, len(apply_rows), len(tech_apply)
 
 

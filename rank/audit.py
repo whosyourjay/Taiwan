@@ -2,10 +2,9 @@
 
 import collections
 
-import ceec_score
-import rank_uac
 from lib import tsvio
 from lib.paths import data_path
+from rank import ceec_score, uac
 
 
 def row_id(row):
@@ -35,10 +34,10 @@ def audit_rows():
     distributions = ceec_score.ScoreDistributions.load(
         scores, data_path("tongce-scores.tsv")
     )
-    uac_rows = list(rank_uac.load("uac", distributions))
+    uac_rows = list(uac.load("uac", distributions))
     known = {(row["year"], row["school"], row["dept"]) for row in uac_rows}
-    usable_rows = list(rank_uac.load_apply(cohort))
-    matched_rows = rank_uac.joinable(usable_rows, known)
+    usable_rows = list(uac.load_apply(cohort))
+    matched_rows = uac.joinable(usable_rows, known)
     usable = {row_id(row) for row in usable_rows}
     matched = {row_id(row): row["dept"] for row in matched_rows}
     uac_schools = {(row["year"], row["school"]) for row in uac_rows}

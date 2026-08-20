@@ -4,7 +4,7 @@ import random
 import unittest
 
 from fetch import entry as fetcher
-from lib.paths import path
+from lib.paths import source_path
 from parse import cap, entry
 
 
@@ -60,7 +60,7 @@ class TestDistribution(unittest.TestCase):
 
 class TestOfficialSources(unittest.TestCase):
     def test_cutoff_spots_and_count(self):
-        source = path("entry", fetcher.SOURCES["jibei-107-cutoffs"]["filename"])
+        source = source_path("entry", fetcher.SOURCES["jibei-107-cutoffs"]["filename"])
         with open(source, encoding="utf-8") as f:
             rows = entry.parse_html(f.read())
         by_school = {row["school"]: row["cap_score"] for row in rows}
@@ -70,7 +70,7 @@ class TestOfficialSources(unittest.TestCase):
         self.assertEqual(by_school["基隆高中"], 8.6)
 
     def test_cap_categories_sum_to_official_valid_candidates(self):
-        source = path("entry", fetcher.SOURCES["cap-107-statistics"]["filename"])
+        source = source_path("entry", fetcher.SOURCES["cap-107-statistics"]["filename"])
         with open(source, encoding="utf-8") as f:
             rows = cap.parse_html(f.read())
         self.assertEqual(sum(row["students"] for row in rows), 226639)

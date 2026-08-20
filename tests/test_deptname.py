@@ -2,8 +2,8 @@ import os
 import random
 import unittest
 
-import rank_uac
-from deptname import normalize
+from rank import uac
+from lib.deptname import normalize
 from lib.paths import data_path
 
 
@@ -43,7 +43,7 @@ PARTS = ["資訊工程", "學系", "系", "科", "學士班", "學位學程", "�
 
 
 def dept_names():
-    for name in rank_uac.SOURCES.values():
+    for name in uac.SOURCES.values():
         source = data_path(name)
         if not os.path.exists(source):
             continue

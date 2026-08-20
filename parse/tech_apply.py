@@ -10,7 +10,7 @@ import re
 import sys
 
 from lib import tsvio
-from lib.paths import data_path, path
+from lib.paths import data_path, source_path
 from parse.uac import pdf_text
 
 
@@ -105,8 +105,8 @@ def parse_pair(report, rules, year):
 
 def main(out_path):
     year = "110"
-    report = path("tech", f"jctv-{year}-xuece-screen.pdf")
-    rules = path("tech", f"jctv-{year}-xuece-rules.xls")
+    report = source_path("tech", f"jctv-{year}-xuece-screen.pdf")
+    rules = source_path("tech", f"jctv-{year}-xuece-rules.xls")
     rows, reported = parse_pair(report, rules, year)
     print(f"{year}: {len(rows)} of {reported} reported thresholds joined", file=sys.stderr)
     written = tsvio.write_rows(out_path, rows)

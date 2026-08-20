@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-from lib.paths import data_path, path as repo_path
+from lib.paths import data_path, source_path
 from parse.ceec import mark_midpoint
 from parse.uac import pdf_text
 
@@ -188,7 +188,7 @@ def short(rows):
 
 def main(out_path):
     rows = []
-    for source in sorted(glob.glob(repo_path(SCORES))):
+    for source in sorted(glob.glob(source_path(SCORES))):
         got = parse(source)
         subjects = {r[1] for r in got}
         takers = sum(r[3] for r in got if r[1] == "國文")

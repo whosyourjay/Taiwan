@@ -11,7 +11,7 @@ import sys
 from fetch.entry import SOURCES
 from lib import tsvio
 from lib.html_table import tables
-from lib.paths import data_path, path
+from lib.paths import data_path, source_path
 
 
 DISTRICT = "基北區"
@@ -64,7 +64,7 @@ def parse_html(html):
 
 
 def main(out_path):
-    source = path("entry", SOURCES["jibei-107-cutoffs"]["filename"])
+    source = source_path("entry", SOURCES["jibei-107-cutoffs"]["filename"])
     with open(source, encoding="utf-8") as f:
         rows = parse_html(f.read())
     written = tsvio.write_rows(out_path, rows)

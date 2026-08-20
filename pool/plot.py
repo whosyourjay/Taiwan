@@ -14,11 +14,10 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (after the backend is fixed)
 
-from lib.paths import path  # noqa: E402
+from lib.paths import figure_path  # noqa: E402
 from parse import tcte  # noqa: E402
-from pool import model  # noqa: E402
 
-OUT = path("pool-densities.png")
+OUT = figure_path("pool-densities.png")
 
 STYLE = {
     "gsat": ("#1f6feb", "學測 (GSAT)"),

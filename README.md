@@ -43,7 +43,7 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 - `rankings/rank-departments.tsv` — 3,040 (institution, department) pairs
 - `rankings/rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
   department merging
-- `rankings/test-relationships.png` — cross-path evidence for the shared component
+- `figures/` — every generated figure, built by `python3 -m viz`
 - `data/high-school-destinations.tsv` — 110 北一女 graduate destinations
 - `data/high-school-entry-cutoffs.tsv` — 107 基北區 high-school entry cutoffs
 - `data/cap-grade-distributions.tsv` — 107 national CAP A/B/C category counts
@@ -155,7 +155,7 @@ to national rank intervals.
 
 `data/admission-totals.tsv` reports unscored coverage gaps here; the ranking's
 denominator is the seats it holds. The ability pool below does use those totals.
-Gender also does not affect `score`; `gender.py` joins MOE bachelor headcounts on
+Gender also does not affect `score`; `rank/gender.py` joins MOE bachelor counts on
 normalized department names and matches 2,407 of 3,040 rows.
 
 ## Ability pool
@@ -187,7 +187,7 @@ group holding no placeable seat.
 same two steps a department's cutoff goes through: the published distribution
 says what share of takers it beats, and that exam's curve says what that share is
 worth in the pool. A candidate sitting exactly on a bar counts as the middle of
-everyone who scored it, which is the convention `ceec_score.midrank_top` applies
+everyone who scored it, which is the convention `rank.ceec_score.midrank_top` applies
 to department bars and 繁星 gates alike.
 
 ## Experimental test-pool fit
@@ -246,7 +246,7 @@ more test takers at one ability level than there are students. On all current
 thresholds, direct percentile transfer has 18.63 mean absolute disagreement and
 the constrained linear fit has 8.44 points.
 
-`python3 pool/fit.py` reports the fit and writes `pool-densities.png`. The left
+`python3 pool/fit.py` reports the fit and writes `figures/pool-densities.png`. The left
 panel shows the five count densities and the right panel shows their conversions
 from within-exam rank to original-cohort percentile. `python3 -m pool.plot`
 redraws the PNG without the text report.
@@ -297,8 +297,8 @@ the evidence the loadings are fitted from.
 
     https://www.jctv.ntut.edu.tw/downloads/{year}/union42/{year}_up01.pdf
 
-Both are text PDFs, saved by hand as `uac/{year}-cutoffs.pdf` and
-`tech/union42-{year}-cutoffs.pdf`.
+Both are text PDFs, saved by hand as `sources/uac/{year}-cutoffs.pdf` and
+`sources/tech/union42-{year}-cutoffs.pdf`.
 
 一般大學, 繁星推薦 (學測 + 在校學業成績全校排名百分比). 各校系錄取標準一覽表,
 split into 第一類至第七類學群 and 第八類學群 (medicine):
@@ -306,17 +306,17 @@ split into 第一類至第七類學群 and 第八類學群 (medicine):
     https://www.cac.edu.tw/cacportal/star_his_report/{year}/{year}_result_standard/{one2seven,eight}/{code}/{year}Standard_{code}.pdf
 
 Text PDFs in fixed columns. Downloaded for every school listed in 110 and 111,
-into `star/` -> `data/star-cutoffs.tsv`. See Method.
+into `sources/star/` -> `data/star-cutoffs.tsv`. See Method.
 
 一般大學, 個人申請 (學測). 第一階段篩選標準一覽表:
 
     https://www.cac.edu.tw/cacportal/apply_his_report/{year}/{year}_sieve_standard/report/pict/{code}.png
 
-One PNG per school, downloaded for the same schools and years into `apply/`
+One PNG per school, downloaded for the same schools and years into `sources/apply/`
 and OCR'd into `data/apply-cutoffs.tsv`. See Method.
 
 技專校院入學測驗中心, 統測 成績人數累計表 (open data 報表B2). One PDF a year,
-saved by hand as `tech/tcte-{year}-scores.pdf` for 108-114.
+saved by hand as `sources/tech/tcte-{year}-scores.pdf` for 108-114.
 
 科技校院日間部四年制申請入學, 110 第一階段最低篩選標準 and the companion
 招生學校系(組)、學程 data workbook:
@@ -343,29 +343,38 @@ handbook, pages 16–17:
 
 Downloaded inputs and auxiliary tables:
 
-- `uac/` and `tech/union42-*.pdf` — the two 分發 cutoff tables above, next to the
+- `sources/uac/` and `sources/tech/union42-*.pdf` — the two 分發 cutoff tables above, next to the
   `pdftotext -layout` dump each parser caches on first run.
 - `data/admission-totals.tsv` — actual 108–114 admissions from the annual MOE
   Education Statistics tables A1-17 (editions 109–114) and A1-18 (edition 115).
   The ranking command reports gaps against these counts; they do not affect scores.
-- `star/` — 繁星推薦 錄取標準, and `data/star-cutoffs.tsv` parsed from it.
+- `sources/star/` — 繁星推薦 錄取標準, and `data/star-cutoffs.tsv` parsed from it.
   Joined rows contribute to `score` as a separate admission path.
-- `apply/` — 個人申請 篩選標準 PNGs, and `data/apply-cutoffs.tsv` OCR'd from them.
+- `sources/apply/` — 個人申請 篩選標準 PNGs, and `data/apply-cutoffs.tsv` OCR'd from them.
   Only validated rows that match a 分發入學 department contribute to `score`.
-- `ceec/` — 大考中心 score distributions (級分人數百分比累計表 and friends,
+- `sources/ceec/` — 大考中心 score distributions (級分人數百分比累計表 and friends,
   .xls, back to year 91) for 學測 and 分科測驗. `parse.ceec` extracts
   108-114 into `data/ceec-scores.tsv`; these distributions refine the ordering of
   分發入學 cutoffs as described in Method.
-- `tech/tcte-*-scores.pdf` — 統測 成績人數累計表, one-point bands over 42
+- `sources/tech/tcte-*-scores.pdf` — 統測 成績人數累計表, one-point bands over 42
   subjects. `parse.tcte` extracts 108-114 into `data/tongce-scores.tsv`. The
   experimental pool model uses it; the ranking bridge still uses `norm`.
-- `tech/jctv-110-xuece-{screen.pdf,rules.xls}` — 科技校院四年制申請入學
+- `sources/tech/jctv-110-xuece-{screen.pdf,rules.xls}` — 科技校院四年制申請入學
   第一階段最低篩選標準 and its per-program weights and quotas. Together they
   produce `data/tech-apply-cutoffs.tsv` for the experimental test-pool fit.
-- `high-school/fg-110-destinations.pdf` — 北一女 110 graduate destinations.
+- `sources/high-school/fg-110-destinations.pdf` — 北一女 110 graduate destinations.
   `parse.high_school` preserves both named university rows and grouped remainder.
-- `entry/` — the official 107 CAP statistics page and the 107 基北 cutoff page.
+- `sources/entry/` — the official 107 CAP statistics page and the 107 基北 cutoff page.
   `parse.cap` and `parse.entry` turn them into the two entry-evidence TSVs.
+
+## Layout
+
+- `fetch/` — downloads a source into `sources/`
+- `parse/` — turns a downloaded source into a `data/*.tsv`
+- `rank/` — scores every path onto one axis and writes `rankings/*.tsv`
+- `pool/` — the experimental exam-population and noisy-measurement fits
+- `viz/` — every figure, written to `figures/`
+- `lib/` — paths, TSV reading and writing, 系組 name normalisation
 
 ## Rebuild
 
@@ -373,15 +382,15 @@ Run commands from the repository root. Install Python packages with
 `python3 -m pip install -r requirements.txt`; the PDF parsers also require
 `pdftotext`.
 
-    python3 -m parse.uac       # uac/*-cutoffs.pdf -> data/uac-cutoffs.tsv
-    python3 -m parse.tech      # tech/union42-*.pdf -> data/tech-cutoffs.tsv
+    python3 -m parse.uac       # sources/uac/*-cutoffs.pdf -> data/uac-cutoffs.tsv
+    python3 -m parse.tech      # sources/tech/union42-*.pdf -> data/tech-cutoffs.tsv
     python3 -m fetch.star 110 111
-    python3 -m parse.star      # star/*.pdf -> data/star-cutoffs.tsv
+    python3 -m parse.star      # sources/star/*.pdf -> data/star-cutoffs.tsv
     python3 -m fetch.apply 110 111
-    python3 -m parse.apply     # apply/*.png -> data/apply-cutoffs.tsv
-    python3 -m fetch.ceec      # optional; refresh ceec/
-    python3 -m parse.ceec      # ceec/*.xls -> data/ceec-scores.tsv
-    python3 -m parse.tcte      # tech/tcte-*-scores.pdf -> data/tongce-scores.tsv
+    python3 -m parse.apply     # sources/apply/*.png -> data/apply-cutoffs.tsv
+    python3 -m fetch.ceec      # optional; refresh sources/ceec/
+    python3 -m parse.ceec      # sources/ceec/*.xls -> data/ceec-scores.tsv
+    python3 -m parse.tcte      # sources/tech/tcte-*-scores.pdf -> data/tongce-scores.tsv
     python3 -m fetch.tech_apply
     python3 -m parse.tech_apply  # 110 四技申請 -> data/tech-apply-cutoffs.tsv
     python3 -m fetch.high_school
@@ -389,35 +398,32 @@ Run commands from the repository root. Install Python packages with
     python3 -m fetch.entry
     python3 -m parse.cap          # 107 CAP categories -> data/cap-grade-distributions.tsv
     python3 -m parse.entry        # 107 基北 cutoffs -> data/high-school-entry-cutoffs.tsv
-    python3 rank_uac.py        # all paths, bridge, gender -> rankings/rank-*.tsv
-    python3 plot_relationships.py  # bridge evidence -> rankings/test-relationships.png
+    python3 -m rank.uac        # all paths, bridge, gender -> rankings/rank-*.tsv
     python3 -m pool.ability    # ability curves -> rankings/ability-*.tsv
-    python3 -m pool.tiling     # the curves themselves + tiling.png
+    python3 -m pool.tiling     # the curves themselves + the tiling figure
     python3 -m pool.coverage   # seats held against published intake, by path
     python3 -m pool.percentile 103 國英數社自 65   # one 學測 total, ranked
-    python3 pool/fit.py        # joint fit report + pool-densities.png
-    python3 -m pool.plot       # redraw only pool-densities.png
+    python3 -m pool.fit        # joint fit report + the density figure
+    python3 -m pool.plot       # redraw only the density figure
     python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~2min
     python3 -m pool.diagnose   # the same fit, department by department, ~2min
+    python3 -m viz             # every figure -> figures/
     python3 -m unittest
 
 Both CAC fetchers take the schools named in their `WANT` list, or every school
-the year lists when that list is empty. `star/` and `apply/` hold the whole-year
-download; the eight names in `fetch/star.py` cut it to a few seconds.
+the year lists when that list is empty. `sources/star/` and `sources/apply/` hold
+the whole-year download; the eight names in `fetch/star.py` cut it to a few seconds.
 
-`rank_uac.py` pulls the 教育部 CSV through `gender.py` on first run. The 系組
-name normalisation both it and `gender.py` group by lives in `deptname.py`.
+`rank/uac.py` pulls the 教育部 CSV through `rank/gender.py` on first run. Both
+group departments by the 系組 name normalisation in `lib/deptname.py`, and
+`rank/ceec_score.py` turns a 級分 bar into a share of that exam's takers.
 
-Shared by the pipeline: `lib/tsvio.py` reads and writes the tables, `deptname.py`
-normalises 系組 names, `gender.py` joins the 教育部 student counts, and
-`ceec_score.py` turns a 級分 bar into a share of that exam's takers.
-
-Off to the side, `diagnose.py` prints path scores for a fixed department sample.
-`python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
+Off to the side, `rank/diagnose.py` prints path scores for a fixed department
+sample. `python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
 exam-population model, `pool/compare.py` ranks its candidates on held-out
 departments, and `pool/factor.py` adds a noise level per measurement, reading
 the bars `pool/bars.py` builds. `pool/diagnose.py` is to that fit what
-`diagnose.py` is to the rankings.
+`rank/diagnose.py` is to the rankings.
 
 `parse.apply` needs tesseract with traditional Chinese:
 

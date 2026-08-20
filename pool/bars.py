@@ -9,9 +9,8 @@ second fact is what lets a fit tell a noisy measurement from a selective one.
 
 import collections
 
-import ceec_score
-import rank_uac
 from pool import factor
+from rank import ceec_score
 
 RANK_PATH = "star"
 

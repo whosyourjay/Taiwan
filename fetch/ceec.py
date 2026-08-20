@@ -4,7 +4,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
-from lib.paths import path as repo_path
+from lib.paths import source_path
 
 BASE = "https://www.ceec.edu.tw"
 INDEXES = {
@@ -53,7 +53,7 @@ def data_links(page_url):
 
 def main():
     for exam, index_id in INDEXES.items():
-        outdir = repo_path("ceec", exam)
+        outdir = source_path("ceec", exam)
         os.makedirs(outdir, exist_ok=True)
         for page_url, title in year_pages(index_id).items():
             year = re.match(r"(\d+)", title)

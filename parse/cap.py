@@ -6,7 +6,7 @@ import sys
 from fetch.entry import SOURCES
 from lib import tsvio
 from lib.html_table import tables
-from lib.paths import data_path, path
+from lib.paths import data_path, source_path
 
 
 CATEGORY = re.compile(r"^\d+A\d+B\d+C$")
@@ -37,7 +37,7 @@ def parse_html(html):
 
 
 def main(out_path):
-    source = path("entry", SOURCES["cap-107-statistics"]["filename"])
+    source = source_path("entry", SOURCES["cap-107-statistics"]["filename"])
     with open(source, encoding="utf-8") as f:
         rows = parse_html(f.read())
     written = tsvio.write_rows(out_path, rows)

@@ -25,11 +25,9 @@ import collections
 import difflib
 import os
 
-import ceec_score
-import deptname
-import gender
-from lib import tsvio
+from lib import deptname, tsvio
 from lib.paths import data_path, ranking_path
+from rank import ceec_score, gender
 
 PATHS = ("uac", "tech", "star", "star_eight", "apply")
 SOURCES = {"uac": "uac-cutoffs.tsv", "tech": "tech-cutoffs.tsv"}

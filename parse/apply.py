@@ -30,7 +30,7 @@ import numpy as np
 from PIL import Image
 
 from lib import tsvio
-from lib.paths import data_path, path as repo_path
+from lib.paths import data_path, source_path
 
 
 N_ORDERS = 6
@@ -300,7 +300,7 @@ def snap(ocr, candidates):
 
 
 def load_colleges():
-    with open(repo_path("apply", "colleges.tsv"), encoding="utf-8") as f:
+    with open(source_path("apply", "colleges.tsv"), encoding="utf-8") as f:
         return {(r["year"], r["college_code"]): r["college"]
                 for r in csv.DictReader(f, delimiter="\t")}
 
@@ -367,7 +367,7 @@ def refresh_names_from_images(out_path, years=()):
     names = load_names()
     wanted = set(years)
     readings = []
-    for source in sorted(glob.glob(repo_path("apply", "*.png"))):
+    for source in sorted(glob.glob(source_path("apply", "*.png"))):
         year = os.path.basename(source).split("-", 1)[0]
         if wanted and year not in wanted:
             continue
@@ -383,7 +383,7 @@ def refresh_names_from_images(out_path, years=()):
 
 def main(out_path):
     colleges, names, rows = load_colleges(), load_names(), []
-    for png in sorted(glob.glob(repo_path("apply", "*.png"))):
+    for png in sorted(glob.glob(source_path("apply", "*.png"))):
         got, skipped = parse(png, colleges, names)
         print(f"{os.path.basename(png)}: {len(got)} 校系, {skipped} non-data rows",
               file=sys.stderr)

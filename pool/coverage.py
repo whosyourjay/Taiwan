@@ -5,11 +5,9 @@ lands in the chunk at the bottom and lifts every department above it. This says
 how big that error is, path by path.
 """
 
-import os
-import sys
 
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
 from pool import fit as pool_fit
 from pool import tiling

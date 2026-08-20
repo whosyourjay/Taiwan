@@ -2,7 +2,7 @@
 
 import unittest
 
-import rank_uac
+from rank import uac
 
 
 class TestJoinable(unittest.TestCase):
@@ -16,7 +16,7 @@ class TestJoinable(unittest.TestCase):
             "dept": "壞境與食品安全檢驗學士學位學程",
             "path": "apply",
         }
-        self.assertEqual(rank_uac.joinable([row], self.known), [row])
+        self.assertEqual(uac.joinable([row], self.known), [row])
         self.assertEqual(row["dept"], "環境與食品安全檢驗學士學位學程")
 
     def test_never_fuzzy_matches_a_text_source(self):
@@ -26,11 +26,11 @@ class TestJoinable(unittest.TestCase):
             "dept": "壞境與食品安全檢驗學士學位學程",
             "path": "star",
         }
-        self.assertEqual(rank_uac.joinable([row], self.known), [])
+        self.assertEqual(uac.joinable([row], self.known), [])
 
     def test_rejects_an_ambiguous_ocr_repair(self):
         candidates = {"甲學系": "甲學系", "乙學系": "乙學系"}
-        self.assertIsNone(rank_uac.ocr_department("壞學系", candidates))
+        self.assertIsNone(uac.ocr_department("壞學系", candidates))
 
 
 if __name__ == "__main__":

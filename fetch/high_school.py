@@ -4,7 +4,7 @@ import os
 import sys
 
 from fetch.ceec import get
-from lib.paths import path
+from lib.paths import path, source_path
 
 
 SOURCES = {
@@ -20,7 +20,7 @@ SOURCES = {
 
 
 def main():
-    outdir = path("high-school")
+    outdir = source_path("high-school")
     os.makedirs(outdir, exist_ok=True)
     for source in SOURCES.values():
         target = os.path.join(outdir, source["filename"])

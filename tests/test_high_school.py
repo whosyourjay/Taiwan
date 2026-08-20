@@ -4,7 +4,7 @@ import random
 import unittest
 
 from fetch import high_school as fetcher
-from lib.paths import path
+from lib.paths import source_path
 from parse import high_school
 
 
@@ -75,7 +75,7 @@ class TestOfficialReport(unittest.TestCase):
         source = fetcher.SOURCES["110"]
         cls.rows = high_school.parse({
             **source,
-            "path": path("high-school", source["filename"]),
+            "path": source_path("high-school", source["filename"]),
         })
 
     def test_spot_values(self):

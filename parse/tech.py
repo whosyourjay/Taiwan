@@ -8,12 +8,11 @@ so it appears on several rows; ranking aggregates them by admitted headcount.
 """
 
 import glob
-import os
 import re
 import sys
 
 from lib import tsvio
-from lib.paths import data_path, path
+from lib.paths import data_path, source_path
 from parse.uac import pdf_text
 
 MAX_PER_SUBJECT = 100.0
@@ -83,7 +82,7 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    pattern = path("tech", "union42-*.pdf")
+    pattern = source_path("tech", "union42-*.pdf")
     for pdf in sorted(glob.glob(pattern)):
         year = re.search(r"union42-(\d+)-", pdf).group(1)
         got = parse(pdf, year)

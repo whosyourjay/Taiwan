@@ -13,19 +13,17 @@ the tiling silently absorbs.
 """
 
 import collections
-import os
-import sys
 
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
 import numpy as np
 from scipy import interpolate
 
-import rank_uac
 from lib import tsvio
 from lib.paths import data_path, ranking_path
 from pool import fit as pool_fit
+from rank import uac
 
 RANKING = "rank-departments.tsv"
 GROUPS = "rank-application-groups.tsv"
@@ -65,7 +63,7 @@ def ranked(source=RANKING):
     """
     order, schools = {}, collections.defaultdict(list)
     for row in tsvio.read_rows(ranking_path(source)):
-        rank_uac.identify_department(row)
+        uac.identify_department(row)
         score = float(row["score"])
         order[(row["school"], row["dept"])] = score
         schools[row["school"]].append(score)

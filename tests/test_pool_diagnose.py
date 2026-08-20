@@ -69,8 +69,8 @@ class TestLevels(unittest.TestCase):
 
 class TestDirectCommand(unittest.TestCase):
     def test_it_imports_from_its_file_path(self):
-        # pool/ lands on sys.path ahead of the repository root, so without a
-        # shim `import diagnose` finds this module rather than the top-level one.
+        # pool/ lands on sys.path ahead of the repository root, so the module
+        # needs its bootstrap to reach lib, parse and rank.
         got = subprocess.run(
             [sys.executable, os.path.join(ROOT, "pool", "diagnose.py"), "--help"],
             cwd=ROOT, text=True, capture_output=True, timeout=60, check=False,

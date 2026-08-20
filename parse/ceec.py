@@ -29,7 +29,7 @@ import os
 import re
 import sys
 
-from lib.paths import data_path, path as repo_path
+from lib.paths import data_path, source_path
 
 GRADES = "ceec/zhikao/*各科級分人數百分比累計表*.xls"
 MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
@@ -165,7 +165,7 @@ def parse(path):
 def main(out_path):
     rows = []
     for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO, GSAT_TOTAL):
-        for source in sorted(glob.glob(repo_path(pattern))):
+        for source in sorted(glob.glob(source_path(pattern))):
             got = parse(source)
             if got:
                 subs = len({r[2] for r in got})

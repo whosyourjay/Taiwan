@@ -18,9 +18,9 @@ import contextlib
 import sys
 import unicodedata
 
-import rank_uac
+from rank import uac
 
-PATHS = rank_uac.PATHS
+PATHS = uac.PATHS
 DEPTS_PER_SCHOOL = 5
 # Wide enough for the longest path name, so a header never runs into its neighbour.
 COLUMN = max(8, max(len(path) for path in PATHS) + 1)
@@ -69,7 +69,7 @@ def by_path(rows):
     out = {}
     for key, paths in cells.items():
         out[key] = {
-            path: (rank_uac.wmean(group, "score"),
+            path: (uac.wmean(group, "score"),
                    sum(r["seats"] for r in group) / len({r["year"] for r in group}))
             for path, group in paths.items()
         }
@@ -97,7 +97,7 @@ def scale_endpoints(rows, year, field):
 
 def coverage(rows, year):
     """Official, observed and unranked seats per path for one year."""
-    totals = rank_uac.load_admission_totals()
+    totals = uac.load_admission_totals()
     observed = collections.Counter()
     for row in rows:
         observed[(row["year"], row["path"])] += row["seats"]
@@ -121,7 +121,7 @@ def pick(table, school):
 def main():
     # The pipeline reports its bridge fits on stdout; keep that off the table.
     with contextlib.redirect_stdout(sys.stderr):
-        rows = rank_uac.build_rows()
+        rows = uac.build_rows()
     table = by_path(rows)
 
     head = pad("department", 26) + f"{'seats/yr':>9}"

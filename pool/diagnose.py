@@ -12,16 +12,13 @@ rows is the whole of what a loading buys.
 """
 
 import argparse
-import os
-import sys
 
-# A file invocation puts pool/, rather than the repository root, on sys.path.
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
-import diagnose as production
 from parse import tcte
 from pool import bars, complement, factor, fit as pool_fit
+from rank import diagnose as production
 
 BUCKETS = ("zhikao",) + complement.VOCATIONAL + ("gsat", factor.RANK)
 NAMES = {"zhikao": "指考", "gsat": "學測", factor.RANK: "在校排名"}

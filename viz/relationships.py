@@ -10,10 +10,10 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-import rank_uac  # noqa: E402
-from lib.paths import ranking_path  # noqa: E402
+from lib.paths import figure_path  # noqa: E402
+from rank import uac  # noqa: E402
 
-OUT = ranking_path("test-relationships.png")
+OUT = figure_path("relationships.png")
 FONTS = ["PingFang HK", "Heiti TC", "Arial Unicode MS", "Hiragino Sans GB"]
 
 
@@ -21,7 +21,7 @@ def component_observations(rows):
     """Rebuild the component inputs from scored pipeline rows."""
     extra = {path: [row for row in rows if row["path"] == path]
              for path in ("star", "star_eight", "apply")}
-    return rank_uac.component_observations(
+    return uac.component_observations(
         [row for row in rows if row["path"] == "uac"],
         [row for row in rows if row["path"] == "tech"],
         extra,
@@ -191,7 +191,7 @@ def draw(rows, models, output=OUT):
 
 def main():
     with contextlib.redirect_stdout(sys.stderr):
-        rows, models = rank_uac.build_rows(with_models=True)
+        rows, models = uac.build_rows(with_models=True)
     print(f"wrote {draw(rows, models)}")
 
 

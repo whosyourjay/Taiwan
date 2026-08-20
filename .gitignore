@@ -1,24 +1,16 @@
 # Downloaded sources. Modules under fetch/ re-download; the UAC and 統測 PDFs
 # come from the URLs in README.md.
-apply/
-ceec/
-entry/
-high-school/
-moe/
-star/
-tech/
-uac/
+sources/
 
-# Built by modules under parse/ and by rank_uac.py.
+# Built by modules under parse/ and by rank/uac.py.
 *.tsv
 !data/admission-totals.tsv
+
+# Built by modules under viz/ and by pool.plot.
+figures/
+*.png
 
 __pycache__/
 *.pyc
 .DS_Store
 *.swp
-
-# Built by python3 -m pool.plot.
-pool-densities.png
-tiling-curves.png
-rankings/test-relationships.png

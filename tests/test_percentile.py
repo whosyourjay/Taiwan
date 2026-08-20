@@ -6,7 +6,7 @@ import os
 import random
 import unittest
 
-import ceec_score
+from rank import ceec_score
 from lib.paths import data_path
 from parse import ceec as parse_ceec
 from pool import percentile

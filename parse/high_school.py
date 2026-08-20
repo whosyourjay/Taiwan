@@ -12,7 +12,7 @@ import sys
 
 from fetch.high_school import SOURCES
 from lib import tsvio
-from lib.paths import data_path, path
+from lib.paths import data_path, source_path
 from parse.uac import pdf_text
 
 
@@ -128,7 +128,7 @@ def parse(source):
 def main(out_path):
     rows = []
     for year, source in SOURCES.items():
-        source = {**source, "path": path("high-school", source["filename"])}
+        source = {**source, "path": source_path("high-school", source["filename"])}
         got = parse(source)
         named = sum(r["students"] for r in got if r["destination_type"] == "university")
         total = sum(r["students"] for r in got)

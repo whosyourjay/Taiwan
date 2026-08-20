@@ -7,11 +7,9 @@ build the curves and nothing else, so no rank survives into a score.
 """
 
 import collections
-import os
-import sys
 
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import _bootstrap  # noqa: F401
 
 import numpy as np
 

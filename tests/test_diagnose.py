@@ -1,6 +1,6 @@
 import unittest
 
-import diagnose
+from rank import diagnose
 
 
 class TestColumnWidth(unittest.TestCase):

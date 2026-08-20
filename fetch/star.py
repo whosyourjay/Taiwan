@@ -14,9 +14,9 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from lib.paths import path
+from lib.paths import path, source_path
 
-OUT = path("star")
+OUT = source_path("star")
 
 BASE = "https://www.cac.edu.tw/cacportal/star_his_report"
 GROUPS = ("one2seven", "eight")

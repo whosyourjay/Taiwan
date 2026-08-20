@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from ceec_score import ScoreDistributions, calibrate_fallbacks
+from rank.ceec_score import ScoreDistributions, calibrate_fallbacks
 from parse.ceec import mark_midpoint
 
 

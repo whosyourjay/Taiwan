@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from lib import tsvio
-from lib.paths import data_path, path
+from lib.paths import data_path, path, source_path
 
 # 指考 (through 110) uses 100 points; UAC academic scores from 111 use 60 levels.
 def max_per_subject(year):
@@ -105,7 +105,7 @@ def parse(pdf, year):
 
 def main(out_path):
     rows = []
-    for pdf in sorted(glob.glob(path("uac", "*-cutoffs.pdf"))):
+    for pdf in sorted(glob.glob(source_path("uac", "*-cutoffs.pdf"))):
         year = os.path.basename(pdf).split("-")[0]
         got = parse(pdf, year)
         print(f"{year}: {len(got)} 系組", file=sys.stderr)
