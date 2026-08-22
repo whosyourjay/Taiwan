@@ -14,6 +14,7 @@ if __package__ in (None, ""):
 import numpy as np
 
 from lib import tsvio
+from lib.english import english_names
 from lib.paths import ranking_path
 from pool import fit as pool_fit
 from pool import tiling
@@ -91,14 +92,17 @@ def collect(scored, columns):
     return moment, weight
 
 
-def table(scored, columns, exams):
+def table(scored, columns, exams, english=None):
     """One ranked row per key, at the seat-weighted ability of its thresholds."""
+    english = english or {}
     moment, weight = collect(scored, columns)
     out = []
     for key, sums in moment.items():
         seen = [sums[exam] / weight[key][exam] for exam in exams if weight[key][exam]]
         row = {"rank": 0}
-        row.update(zip(columns, key))
+        for column, value in zip(columns, key):
+            row[column] = value
+            row[f"{column}_en"] = english.get(value, value)
         row["ability"] = round(100 * sums["all"] / weight[key]["all"], 2)
         row["seats"] = round(weight[key]["all"], 1)
         row["exams"] = len(seen)
@@ -193,13 +197,16 @@ def report(scored, exams, rows):
 
 def main():
     rows, splines = curves()
+    names = {row[field] for row in rows
+             for field in ("school", "dept", "application_group") if row.get(field)}
+    english = english_names(names)
     scored = read(rows, splines)
     exams = sorted({exam for _, exam, _, _ in scored})
     report(scored, exams, rows)
     seats, cohort = pool_sizes(rows)
     print()
     for name, columns in LEVELS:
-        found = table(scored, columns, exams)
+        found = table(scored, columns, exams, english)
         if columns == ("school",):
             add_pool_ratios(found, seats, cohort)
         written = tsvio.write_rows(ranking_path(name), found)

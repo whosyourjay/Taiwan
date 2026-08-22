@@ -26,6 +26,7 @@ import difflib
 import os
 
 from lib import deptname, tsvio
+from lib.english import english_names
 from lib.paths import data_path, ranking_path
 from rank import ceec_score, gender
 
@@ -681,8 +682,8 @@ def aggregate(rows, key):
     return sorted(out, key=lambda d: -d["score"])
 
 
-def write(path, header, ranked, counts):
-    """Write a ranking with blank English-name slots and optional gender counts.
+def write(path, header, ranked, counts, english):
+    """Write a ranking with generated English labels and optional gender counts.
 
     `counts` maps a row key to (men, women); absent keys leave those cells blank.
     """
@@ -693,7 +694,7 @@ def write(path, header, ranked, counts):
             fields = [str(i)]
             names = d["key"] if isinstance(d["key"], tuple) else (d["key"],)
             for name in names:
-                fields += [name, ""]
+                fields += [name, english.get(name, name)]
             fields += [f"{d['score']:.2f}", str(d["years"]), str(d["last_year"])]
             fields += [f"{d['seats_avg']:.1f}"]
             fields += [f"{d['by_path'][p]:.2f}" if p in d["by_path"] else ""
@@ -801,17 +802,22 @@ def main():
     tail += ["men", "women", "pct_women"]
     by_dept_counts = gender.load()
     by_school_counts = gender.school_totals(by_dept_counts)
+    names = {row[field] for row in rows
+             for field in ("school", "dept", "application_group") if row.get(field)}
+    english = english_names(names)
     write(
         ranking_path("rank-universities.tsv"),
         ["rank", "school", "school_en"] + tail,
         aggregate(rows, lambda r: r["school"]),
         lambda school: by_school_counts.get(school),
+        english,
     )
     write(
         ranking_path("rank-departments.tsv"),
         ["rank", "school", "school_en", "dept", "dept_en"] + tail,
         aggregate(rows, lambda r: (r["school"], r["dept"])),
         lambda key: gender.lookup(by_dept_counts, *key),
+        english,
     )
     write(
         ranking_path("rank-application-groups.tsv"),
@@ -830,6 +836,7 @@ def main():
             lambda r: (r["school"], r["dept"], r["application_group"]),
         ),
         lambda key: None,
+        english,
     )
 
 

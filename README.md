@@ -52,8 +52,8 @@ Columns: `rank school school_en [dept dept_en [application_group
 application_group_en]] score years last_year seats_avg uac tech star star_eight apply men
 women pct_women`
 
-`school_en`, `dept_en` and `application_group_en` are intentionally blank join
-slots. English-name mappings are maintained outside this repository.
+`school_en`, `dept_en` and `application_group_en` are generated through Google
+Translate and cached in `data/name-english.tsv`.
 
 `data/high-school-destinations.tsv` uses the columns `year high_school destination
 destination_type students reporting_floor graduates source_date`. Filter

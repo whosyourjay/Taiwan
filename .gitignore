@@ -6,6 +6,10 @@ sources/
 *.tsv
 !data/admission-totals.tsv
 !data/assessment-pool-inputs.tsv
+!data/name-english.tsv
+
+# Downloaded on demand by rank/gender.py.
+/rank/moe/
 
 # Built by modules under viz/ and by pool.plot.
 figures/

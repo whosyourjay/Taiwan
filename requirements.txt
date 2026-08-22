@@ -4,3 +4,4 @@ pdfplumber
 Pillow
 scipy
 xlrd
+deep-translator

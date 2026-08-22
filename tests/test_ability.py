@@ -102,6 +102,14 @@ class TestTable(unittest.TestCase):
         self.assertAlmostEqual(got[0]["zhikao"], 90.0)
         self.assertAlmostEqual(got[0]["gsat"], 80.0)
 
+    def test_generated_names_follow_each_chinese_name(self):
+        english = {"A大學": "University A", "電機系": "Electrical Engineering"}
+        got = ability.table(self.scored(), ("school", "dept"), EXAMS, english)[0]
+        self.assertEqual(list(got)[:5],
+                         ["rank", "school", "school_en", "dept", "dept_en"])
+        self.assertEqual(got["school_en"], "University A")
+        self.assertEqual(got["dept_en"], "Electrical Engineering")
+
     def test_the_bigger_path_pulls_the_average(self):
         scored = ability.read([row("uac", 300, ceec_percentile=0.9),
                                row("apply", 100, cohort_top=0.2)], STRAIGHT)
