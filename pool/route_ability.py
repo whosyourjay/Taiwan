@@ -15,9 +15,11 @@ ROUTES = {
     "uac": ("Exam score", "一般大學 分發入學"),
     "tech": ("Exam score", "四技二專 聯合登記分發"),
     "star": ("Combined score", "一般大學 繁星推薦"),
-    "star_eight": ("Review", "繁星推薦 第八類"),
-    "apply": ("Review", "一般大學 申請入學"),
-    "tech_apply": ("Review", "科技校院 甄選 / 申請入學"),
+    # Every remaining path screens on 學測 or 統測 before it interviews anyone,
+    # and that screen is the score measured here.
+    "star_eight": ("Combined score", "繁星推薦 第八類"),
+    "apply": ("Exam score", "一般大學 申請入學"),
+    "tech_apply": ("Exam score", "科技校院 甄選 / 申請入學"),
 }
 TOTAL_PATH = {"star_eight": "star", "tech_apply": "tech_select"}
 

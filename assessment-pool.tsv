@@ -1,2 +1,2 @@
 year	percentile_counts	B	B_display	cohort_scaled	source
-2021	Xuece, Tongce, Zhikao	185052	185k	yes	197,467 current registrations minus 12.4k overlap estimate (7.0k vocational, 2.3k ordinary, 2.3k comprehensive, 0.8k other); Zhikao subset
+2021	Xuece, Tongce, Zhikao	185052	185k	yes	current Xuece and Tongce registrations minus track-mix overlap; Zhikao subset

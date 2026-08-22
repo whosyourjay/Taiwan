@@ -1,6 +1,5 @@
 #!/bin/sh
-# Run the tests before a commit lands. `SKIP_TESTS=1 git commit ...` to bypass.
-[ -n "$SKIP_TESTS" ] && exit 0
+# Run the tests before a commit lands.
 
 root=$(git rev-parse --show-toplevel) || exit 1
 cd "$root" || exit 1
@@ -9,6 +8,5 @@ python=${PYTHON:-/usr/local/Caskroom/miniconda/base/bin/python3}
 "$python" -m pytest tests -q -x --no-header || {
     echo
     echo "tests failed, so nothing was committed."
-    echo "SKIP_TESTS=1 git commit ... commits anyway."
     exit 1
 }

@@ -5,6 +5,7 @@ sources/
 # Built by modules under parse/ and by rank/uac.py.
 *.tsv
 !data/admission-totals.tsv
+!data/assessment-pool-inputs.tsv
 
 # Built by modules under viz/ and by pool.plot.
 figures/

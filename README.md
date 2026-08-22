@@ -391,6 +391,8 @@ Run commands from the repository root. Install Python packages with
     python3 -m fetch.ceec      # optional; refresh sources/ceec/
     python3 -m parse.ceec      # sources/ceec/*.xls -> data/ceec-scores.tsv
     python3 -m parse.tcte      # sources/tech/tcte-*-scores.pdf -> data/tongce-scores.tsv
+    python3 -m fetch.assessment_pool
+    python3 -m parse.assessment_pool  # -> assessment-pool.tsv for compare/
     python3 -m fetch.tech_apply
     python3 -m parse.tech_apply  # 110 四技申請 -> data/tech-apply-cutoffs.tsv
     python3 -m fetch.high_school
