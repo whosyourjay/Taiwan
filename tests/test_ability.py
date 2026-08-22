@@ -134,6 +134,26 @@ class TestTable(unittest.TestCase):
         self.assertAlmostEqual(merged[0]["ability"], 65.0)
 
 
+class TestPoolRatio(unittest.TestCase):
+    def test_candidates_above_the_bar_use_cumulative_scaled_seats(self):
+        rows = [
+            {"school": "A大學", "ability": 99.0},
+            {"school": "B大學", "ability": 98.0},
+        ]
+        got = ability.add_pool_ratios(rows, {"A大學": 100, "B大學": 200}, 10_000)
+        self.assertEqual(got[0]["pool_seats"], 100.0)
+        self.assertEqual(got[0]["ability_pool_ratio"], 1.0)
+        self.assertEqual(got[1]["ability_pool_ratio"], 0.67)
+
+    def test_tied_schools_enter_the_denominator_together(self):
+        rows = [
+            {"school": "A大學", "ability": 99.0},
+            {"school": "B大學", "ability": 99.0},
+        ]
+        got = ability.add_pool_ratios(rows, {"A大學": 40, "B大學": 60}, 10_000)
+        self.assertEqual([row["ability_pool_ratio"] for row in got], [1.0, 1.0])
+
+
 class TestFuzz(unittest.TestCase):
     def scored(self, rng, count):
         rows = [row("uac", float(rng.integers(1, 200)), dept=f"系{i}",

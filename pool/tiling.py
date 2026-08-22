@@ -21,24 +21,14 @@ import numpy as np
 from scipy import interpolate
 
 from lib import tsvio
-from lib.paths import data_path, ranking_path
+from lib.paths import data_path, path, ranking_path
 from pool import fit as pool_fit
 from rank import uac
 
 RANKING = "rank-departments.tsv"
 GROUPS = "rank-application-groups.tsv"
-CAP = "cap-grade-distributions.tsv"
 TOTALS = "admission-totals.tsv"
-
-# 國中教育會考 sits at the end of 9th grade and its takers reach university three
-# years later. Practically the whole age group sits it, so its headcount stands
-# in for a census of one cohort — births less a negligible number of deaths.
-CAP_LEAD = 3
-
-# Admitted through routes that publish no bar we can place. Leaving them in the
-# cohort would seat them below every scored department, which is wrong for
-# 特殊選才 above all, so they come out of the denominator instead.
-UNPLACED_PATHS = ("special", "other")
+ASSESSMENT = "assessment-pool.tsv"
 
 # 分發 and 統測登記分發 publish a cutoff for every 系組, so each one can be placed
 # on its own. 繁星 and 個申 publish one cutoff per department, and splitting their
@@ -104,7 +94,7 @@ def path_scales(placed, filled):
     """What to multiply a path's held seats by to reach its published intake.
 
     We hold every 分發 seat but only three quarters of 個申 and a fifth of 四技
-    甄選. Against a cohort denominator the seats we are missing would all sit at
+    甄選. Against an assessment-pool denominator the seats we are missing would sit at
     the bottom of the axis, below every department, which is the one place they
     certainly do not belong. Scaling each held seat up to its path's real intake
     puts them back at the abilities that path admits at, under the assumption
@@ -130,19 +120,11 @@ def seats_in_order(rows, order, schools, groups=None, scales=None):
     return out
 
 
-def cohort_size(year, cap=CAP, filled=None):
-    """Everyone competing for a placeable seat in `year`, or None if unknown.
-
-    None leaves the axis normalised to the seats in hand, which reads the
-    weakest department as the weakest student in the country.
-    """
-    wanted = str(int(year) - CAP_LEAD)
-    sat = sum(float(row["students"]) for row in tsvio.read_rows(data_path(cap))
-              if row["year"] == wanted)
-    if not sat:
-        return None
-    filled = admitted(year) if filled is None else filled
-    return sat - sum(filled.get(path, 0.0) for path in UNPLACED_PATHS)
+def assessment_size(year, source=ASSESSMENT):
+    """Distinct current students sitting Xuece or Tongce in `year`."""
+    western_year = str(int(year) + 1911)
+    return sum(float(row["B"]) for row in tsvio.read_rows(path(source))
+               if row["year"] == western_year) or None
 
 
 def tile(placed, total=None):
@@ -327,7 +309,7 @@ def main():
     scales = path_scales(placed_rows(rows, order, schools, groups), filled)
     placed = seats_in_order(rows, order, schools, groups, scales)
     held = sum(seats for *_, seats in placed)
-    points, total = tile(placed, cohort_size(pool_fit.YEAR, filled=filled))
+    points, total = tile(placed, assessment_size(pool_fit.YEAR))
     fitted = curves(points)
     report(points, fitted, total, held)
     shares, _ = seat_shares(placed)

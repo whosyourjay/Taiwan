@@ -1,2 +1,2 @@
 year	percentile_counts	B	B_display	cohort_scaled	source
-2021	Xuece, Tongce, Zhikao	185052	185k	yes	current Xuece and Tongce registrations minus track-mix overlap; Zhikao subset
+2021	Xuece, Tongce, Zhikao	185052	185k	no	current Xuece and Tongce registrations minus track-mix overlap; Zhikao subset

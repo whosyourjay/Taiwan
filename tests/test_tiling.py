@@ -1,7 +1,10 @@
 """Tests for reading exam curves off the department ranking."""
 
 import collections
+import csv
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -99,6 +102,15 @@ class TestTile(unittest.TestCase):
         ])
         levels = tiling.ability(tiling.curve(points["gsat"]), [0.05, 0.20, 0.60])
         self.assertEqual(list(levels), sorted(levels, reverse=True))
+
+    def test_assessment_size_reads_the_test_taker_union(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "assessment-pool.tsv"
+            with source.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, ["year", "B"], delimiter="\t")
+                writer.writeheader()
+                writer.writerow({"year": "2021", "B": 185_052})
+            self.assertEqual(tiling.assessment_size("110", source), 185_052)
 
 
 class TestCurve(unittest.TestCase):

@@ -35,7 +35,7 @@ def curves():
     scales = tiling.path_scales(
         tiling.placed_rows(rows, order, schools, groups), filled)
     placed = tiling.seats_in_order(rows, order, schools, groups, scales)
-    points, _ = tiling.tile(placed, tiling.cohort_size(pool_fit.YEAR, filled=filled))
+    points, _ = tiling.tile(placed, tiling.assessment_size(pool_fit.YEAR))
     return rows, tiling.splines(points)
 
 
@@ -137,6 +137,46 @@ def disagreement(scored, exams):
     return out
 
 
+def pool_sizes(rows):
+    """Estimated annual seats by school and the cohort that holds them.
+
+    These are the same path-scaled seats and assessment denominator used to build
+    the exam-to-ability curves. The ranking table's ordinary `seats` column
+    remains the observed sample.
+    """
+    order, schools = tiling.ranked()
+    groups = tiling.grouped()
+    filled = tiling.admitted(pool_fit.YEAR)
+    placed = list(tiling.placed_rows(rows, order, schools, groups))
+    scales = tiling.path_scales(placed, filled)
+    seats = collections.defaultdict(float)
+    for row, _, _ in placed:
+        seats[row["school"]] += (float(row["seats"])
+                                  * scales.get(row["path"], 1.0))
+    return seats, tiling.assessment_size(pool_fit.YEAR)
+
+
+def add_pool_ratios(rows, seats, cohort):
+    """Candidates above a school's ability per cumulative estimated seat."""
+    cumulative = 0.0
+    start = 0
+    while start < len(rows):
+        ability = rows[start]["ability"]
+        stop = start
+        while stop < len(rows) and rows[stop]["ability"] == ability:
+            stop += 1
+        cumulative += sum(seats.get(row["school"], 0.0)
+                          for row in rows[start:stop])
+        for row in rows[start:stop]:
+            row["pool_seats"] = round(seats.get(row["school"], 0.0), 1)
+            row["ability_pool_ratio"] = (
+                round(cohort * (1.0 - ability / 100.0) / cumulative, 2)
+                if cohort and cumulative else ""
+            )
+        start = stop
+    return rows
+
+
 def report(scored, exams, rows):
     counted = collections.Counter()
     for row, exam, _, seats in scored:
@@ -156,9 +196,13 @@ def main():
     scored = read(rows, splines)
     exams = sorted({exam for _, exam, _, _ in scored})
     report(scored, exams, rows)
+    seats, cohort = pool_sizes(rows)
     print()
     for name, columns in LEVELS:
-        written = tsvio.write_rows(ranking_path(name), table(scored, columns, exams))
+        found = table(scored, columns, exams)
+        if columns == ("school",):
+            add_pool_ratios(found, seats, cohort)
+        written = tsvio.write_rows(ranking_path(name), found)
         print(f"{written:>5} rows -> {name}")
 
 

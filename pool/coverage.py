@@ -1,6 +1,6 @@
 """Compare the seats we hold on each path against the published path totals.
 
-The tiling normalises against the whole age cohort, so every seat we are missing
+The tiling normalises against the assessment pool, so every seat we are missing
 lands in the chunk at the bottom and lifts every department above it. This says
 how big that error is, path by path.
 """
@@ -21,7 +21,7 @@ def main():
     filled = tiling.admitted(year)
     placed = list(tiling.placed_rows(rows, order, schools, groups))
     scales = tiling.path_scales(placed, filled)
-    cohort = tiling.cohort_size(year, filled=filled)
+    cohort = tiling.assessment_size(year)
     print(f"\n{year} seats held against published totals")
     seated = 0.0
     for path, scale in sorted(scales.items()):
@@ -31,8 +31,8 @@ def main():
         seated += mine * scale
         share = f"{100 * mine / theirs:5.1f}%" if theirs else "     -"
         print(f"  {path:<12}{mine:>9,.0f}{theirs:>9,.0f}{share:>9}")
-    print(f"\n{seated:,.0f} seats placed in a cohort of {cohort:,.0f}, so the bottom"
-          f" chunk is {100 * (1 - seated / cohort):.1f}% of the age group")
+    print(f"\n{seated:,.0f} seats placed among {cohort:,.0f} test takers, so the bottom"
+          f" chunk is {100 * (1 - seated / cohort):.1f}% of the assessment pool")
 
 
 if __name__ == "__main__":

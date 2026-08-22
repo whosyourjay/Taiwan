@@ -170,18 +170,17 @@ together are one point on that exam's curve. `pool/tiling.py` pools those points
 at each distinct bar, makes the result fall with isotonic regression, and fits a
 shape-preserving cubic through ten seat-weighted knots.
 
-The axis runs over an age cohort rather than over the seats in hand.
-`data/cap-grade-distributions.tsv` counts everyone who sat 國中教育會考, which
-practically the whole age group does three years before university entry, so it
-stands in for a census. 特殊選才 and 其他管道 publish no bar we can place, so they
-come out of that denominator instead of being seated below every department.
+The axis runs over the distinct current students who sat 學測 or 統測 rather than
+over the seats in hand. `assessment-pool.tsv` estimates that union directly;
+指考 sits inside it. Cross-country consumers can place the resulting percentile
+on an age cohort with the assessment-pool/population transform.
 
 We hold every 分發 seat but only three quarters of 個申 and a fifth of 四技甄選.
 Left alone those missing seats would all sit at the bottom of the axis, so
 `path_scales` lifts each path's held seats onto its published intake from
 `data/admission-totals.tsv`. `python3 -m pool.coverage` prints that comparison
-path by path. What remains below the weakest department is the 32% of the age
-group holding no placeable seat.
+path by path. What remains below the weakest department is the part of the
+assessment pool holding no placeable seat.
 
 `python3 -m pool.percentile YEAR SUBJECTS SCORE` runs one 學測 total through the
 same two steps a department's cutoff goes through: the published distribution

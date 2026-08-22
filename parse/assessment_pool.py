@@ -87,7 +87,7 @@ def main(out_path=None, tongce_source=None):
     estimated = overlap(xuece, tongce, published_inputs())
     total = round(xuece["current"] + tongce["current"] - sum(estimated.values()))
     row = {"year": YEAR, "percentile_counts": "Xuece, Tongce, Zhikao", "B": total,
-           "B_display": f"{total / 1000:.0f}k", "cohort_scaled": "yes",
+           "B_display": f"{total / 1000:.0f}k", "cohort_scaled": "no",
            "source": "current Xuece and Tongce registrations minus track-mix overlap; "
                      "Zhikao subset"}
     tsvio.write_rows(out_path or path("assessment-pool.tsv"), [row])
