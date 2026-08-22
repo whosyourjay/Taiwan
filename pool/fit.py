@@ -37,6 +37,7 @@ def fit_pool(observations, sizes):
 EXAMS = {
     "uac": "zhikao",
     "star": "gsat",
+    "star_eight": "gsat",
     "apply": "gsat",
     "tech_apply": "gsat",
 }
@@ -157,8 +158,10 @@ def source_rows():
     known = {(r["year"], r["school"], r["dept"]) for r in uac_rows}
     apply_rows = uac.joinable(list(uac.load_apply(cohort)), known)
     star_rows = uac.joinable(list(uac.load_star(cohort=cohort)), known)
+    star_eight_rows = uac.joinable(list(uac.load_star("eight", cohort)), known)
     tech_apply = load_tech_apply(distributions)
-    rows = uac_rows + tech_rows + apply_rows + star_rows + tech_apply
+    rows = (uac_rows + tech_rows + apply_rows + star_rows
+            + star_eight_rows + tech_apply)
     uac.unify_spelling(rows)
     return rows, len(apply_rows), len(tech_apply)
 

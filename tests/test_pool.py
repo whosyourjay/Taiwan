@@ -357,7 +357,8 @@ class TestVocationalPools(unittest.TestCase):
         self.assertIsNone(pool_fit.exam_of(self.row(year="109")))
 
     def test_the_academic_paths_still_name_their_exam(self):
-        for path, exam in (("uac", "zhikao"), ("star", "gsat"), ("apply", "gsat")):
+        for path, exam in (("uac", "zhikao"), ("star", "gsat"),
+                           ("star_eight", "gsat"), ("apply", "gsat")):
             self.assertEqual(pool_fit.exam_of(self.row(path=path)), exam)
 
     def test_taker_counts_split_the_vocational_exam_into_its_pools(self):

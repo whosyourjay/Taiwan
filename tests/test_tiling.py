@@ -282,6 +282,13 @@ class TestFuzz(unittest.TestCase):
                     got, filled[tiling.TOTAL_NAMES.get(path, path)], places=6
                 )
 
+    def test_eighth_category_is_reserved_inside_the_star_total(self):
+        placed = [({"path": "star", "seats": 600.0}, 0.0, "gsat"),
+                  ({"path": "star_eight", "seats": 200.0}, 0.0, "gsat")]
+        scales = tiling.path_scales(placed, {"star": 1_000.0})
+        self.assertAlmostEqual(scales["star"], 800.0 / 600.0)
+        self.assertEqual(scales["star_eight"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

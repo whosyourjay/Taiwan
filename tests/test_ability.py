@@ -87,6 +87,17 @@ class TestStar(unittest.TestCase):
         self.assertAlmostEqual(got["gsat"], 50.0)
         self.assertAlmostEqual(got["ability"], 72.5)
 
+    def test_第八類_keeps_its_own_output_column(self):
+        ordinary = self.star(5.0, {}, seats=100)
+        eighth = self.star(2.0, {}, seats=20)
+        eighth["path"] = "star_eight"
+        scored = ability.read([ordinary, eighth], STRAIGHT)
+        got = ability.table(scored, ("school", "dept"),
+                            (ability.STAR, ability.STAR_EIGHT))[0]
+        self.assertAlmostEqual(got[ability.STAR], 95.0)
+        self.assertAlmostEqual(got[ability.STAR_EIGHT], 98.0)
+        self.assertAlmostEqual(got["ability"], 95.5)
+
 
 class TestTable(unittest.TestCase):
     def scored(self):

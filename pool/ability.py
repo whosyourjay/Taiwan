@@ -25,6 +25,7 @@ LEVELS = (
     ("ability-groups.tsv", ("school", "dept", "application_group")),
 )
 STAR = "star"
+STAR_EIGHT = "star_eight"
 
 
 def curves():
@@ -67,9 +68,9 @@ def levels(row, splines):
     exam = pool_fit.exam_of(row)
     if exam is None:
         return []
-    if row["path"] == "star":
+    if row["path"] in (STAR, STAR_EIGHT):
         level = star_level(row, splines)
-        return [] if level is None else [(STAR, level)]
+        return [] if level is None else [(row["path"], level)]
     top = pool_fit.top_of(row) if exam in splines else None
     return [] if top is None else [(exam, held(splines[exam], 1.0 - top))]
 

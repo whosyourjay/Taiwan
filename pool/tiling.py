@@ -39,6 +39,10 @@ PER_GROUP = ("uac", "tech")
 # differently.
 TOTAL_NAMES = {"tech_apply": "tech_select"}
 
+# 第八類 publishes its complete final quota.  The national 繁星 total includes
+# those seats, so reserve them before scaling the incomplete 第一至七類 sample.
+RESERVED_TOTALS = {"star_eight": "star"}
+
 # Places where the smoothed curve is pinned. Thousands of bars carry far less
 # shape than that, and a consumer reading the curve pays for every one of them.
 KNOTS = 10
@@ -103,9 +107,16 @@ def path_scales(placed, filled):
     held = collections.defaultdict(float)
     for row, _, _ in placed:
         held[row["path"]] += float(row["seats"])
+    reserved = collections.defaultdict(float)
+    for path, parent in RESERVED_TOTALS.items():
+        reserved[parent] += held[path]
     out = {}
     for path, seats in held.items():
+        if path in RESERVED_TOTALS:
+            out[path] = 1.0
+            continue
         total = filled.get(TOTAL_NAMES.get(path, path))
+        total = max(total - reserved[path], 0.0) if total is not None else None
         out[path] = total / seats if total and seats else 1.0
     return out
 
