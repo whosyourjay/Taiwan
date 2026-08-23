@@ -19,7 +19,8 @@ first column is impact and the second is labour; H = high, M = medium, and L = l
 | L | L | Add diagrams for the year-specific pipeline and the screen-to-admission model when those models are ready. |
 | H | H | Model which schools apply to which department, so 繁星 reads the pool a department actually draws from rather than everyone its bars leave eligible. Without it the reading overshoots outside the top decile. |
 | M | M | Measure within-school spread per school instead of one national figure. Best routes: two bars per school from 優免 plus 一般免試, or per-school intake distributions in 放榜 reporting. |
-| L | M | Read 桃連 and 臺南's 積分 formulas and add their 35 schools to the cutoff table. |
+| M | M | Find a complete per-school 繁星 admit count, so school atoms can be weighted by what each contributes. Compiled tables drop the 明星高中 entirely, so absence there cannot be read as zero. |
+| L | M | Read 臺南's 積分 formula and add its 17 schools to the cutoff table. |
 
 Defer
 | M | L | Extend the year-specific ranking and the required 學測-path collection to every covered year, then aggregate the yearly scores only at the end. |
