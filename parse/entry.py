@@ -1,9 +1,10 @@
-"""Parse published 107 high-school entrance cutoffs.
+"""Parse published high-school entrance cutoffs.
 
-The 107 college-admission cohort entered high school in 107. The first source
-covers 基北區's named general high schools. It reports the 36-point CAP score,
-which the district applies after the total and activity tie-breaks. These rows
-measure selectivity, not each school's entrant distribution or school quality.
+The 110 college-admission cohort entered high school in 107, which one source
+covers for 基北區 on its 36-point CAP score. A second gives six districts at
+once, each on the total its own 超額比序 runs, so those scores order schools
+inside a district and need that district's conversion before they compare
+across districts. Every row measures selectivity, not who ends up enrolling.
 """
 
 import sys
@@ -18,6 +19,9 @@ DISTRICT = "基北區"
 YEAR = "107"
 CAP_MAX = 36.0
 CAPTION = f"{YEAR}{DISTRICT}高中錄取分數排序"
+FALLING_SOURCE = "educatorfocus-114-cutoffs"
+FALLING_YEAR = "114"
+FALLING_DISTRICTS = ("基北區", "桃連區", "竹苗區", "中投區", "臺南區", "高雄區")
 
 
 def table_after_caption(html, caption):
@@ -63,10 +67,50 @@ def parse_html(html):
     return out
 
 
+def paired(rows):
+    """Split a table printed as two school-and-score columns side by side."""
+    for row in rows:
+        for index in range(0, len(row) - 1, 2):
+            school, cutoff = row[index].strip(), row[index + 1].strip()
+            if school and cutoff:
+                yield school, cutoff
+
+
+def parse_falling(html):
+    """Cutoff rows for every district the 114 落點 tables cover.
+
+    Districts score their own 超額比序 on their own totals, so only 基北's is the
+    36-point CAP score. The rest keep their published number and name no maximum
+    until each district's conversion is read.
+    """
+    found = tables(html)
+    if len(found) != len(FALLING_DISTRICTS):
+        raise ValueError(f"expected {len(FALLING_DISTRICTS)} district tables,"
+                         f" found {len(found)}")
+    out = []
+    for district, rows in zip(FALLING_DISTRICTS, found):
+        if rows[0][:2] != ["學校", "錄取分數"]:
+            raise ValueError(f"unexpected header for {district}: {rows[0]}")
+        for school, cutoff in paired(rows[1:]):
+            out.append({
+                "year": FALLING_YEAR,
+                "district": district,
+                "school": school,
+                "cap_score": float(cutoff),
+                "cap_max": CAP_MAX if district == DISTRICT else "",
+                "source_quality": "third_party",
+                "source": FALLING_SOURCE,
+            })
+    return out
+
+
 def main(out_path):
     source = source_path("entry", SOURCES["jibei-107-cutoffs"]["filename"])
     with open(source, encoding="utf-8") as f:
         rows = parse_html(f.read())
+    falling = source_path("entry", SOURCES[FALLING_SOURCE]["filename"])
+    with open(falling, encoding="utf-8") as f:
+        rows += parse_falling(f.read())
     written = tsvio.write_rows(out_path, rows)
     print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 

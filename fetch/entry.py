@@ -22,6 +22,24 @@ SOURCES = {
             "article_id=1905"
         ),
     },
+    "educatorfocus-114-cutoffs": {
+        "filename": "educatorfocus-114-cutoffs.html",
+        "url": "https://www.educatorfocus.com.tw/News/Detail/259CB02831E311C9",
+    },
+    "moe-115-entry-districts": {
+        "filename": "moe-115-entry-districts.pdf",
+        "url": (
+            "https://www.k12ea.gov.tw/Tw/Common/Downloader?"
+            "id=c73b8a82-f1d4-4d59-a8db-8127c8c2708e"
+        ),
+    },
+    "moe-115-entry-results": {
+        "filename": "moe-115-entry-results.pdf",
+        "url": (
+            "https://www.k12ea.gov.tw/Tw/Common/Downloader?"
+            "id=c42e6598-19d0-4b24-8c47-b5f7c9c9ed5c"
+        ),
+    },
 }
 
 

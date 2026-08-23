@@ -45,7 +45,7 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
   department merging
 - `figures/` — every generated figure, built by `python3 -m viz`
 - `data/high-school-destinations.tsv` — 110 北一女 graduate destinations
-- `data/high-school-entry-cutoffs.tsv` — 107 基北區 high-school entry cutoffs
+- `data/high-school-entry-cutoffs.tsv` — high-school entry cutoffs by district
 - `data/cap-grade-distributions.tsv` — 107 national CAP A/B/C category counts
 
 Columns: `rank school school_en [dept dept_en [application_group
@@ -68,15 +68,36 @@ admitted graduate, not every offer. It does not affect the rankings.
 ## High-school entry evidence
 
 Students in the 110 university-admission cohort entered high school in 107.
-`data/high-school-entry-cutoffs.tsv` starts that cohort's high-school input data
-with 52 general high schools in 基北區. `cap_score` is the reported marginal
-36-point 國中教育會考 score and measures selectivity, not the typical student's
-ability. The source is a third-party historical compilation, so rows carry
-`source_quality=third_party` and do not affect the rankings or pool fit.
+`data/high-school-entry-cutoffs.tsv` holds published marginal 國中教育會考 entry
+scores by district and year, from third-party compilations. Every district scores
+its own 超額比序 total, so a score orders schools inside a district and needs that
+district's conversion before it compares across districts.
 
-`data/cap-grade-distributions.tsv` holds MOE's national 107 counts for each
-five-subject A/B/C category. It supports later conversion of entrance results
-to national rank intervals.
+`python3 pool/entry_score.py` supplies those conversions. 基北 scores the plus
+marks, so reading it needs one latent ability behind five noisy subject readings,
+fitted to the national mark shares and to the joint category counts that say how
+often the five agree. Districts scoring only 精熟, 基礎 and 待加強 need no model,
+because their total is a function of the published category alone.
+`python3 pool/high_school.py` then places each cutoff on the ability scale, on
+the order of a hundred schools, as a floor rather than a mean.
+
+繁星 is scored against those schools. `pool/ability.py` reads its class-rank bar
+and its 學測 gate as one ability rather than the larger of the two: each school is
+cut at whichever bar binds it, and the surviving students are averaged over
+schools. Away from the most competitive departments the reading runs high,
+because it averages everyone the bars leave eligible instead of the pool a
+department actually draws from.
+
+`python3 -m fetch.high_school_entry_audit` reads the official 115 school
+directory and inventories entrance-report candidates without search-engine
+queries. It searches NSS sites through their public full-text endpoint and
+records sitemap availability for the remaining sites.
+`python3 -m parse.high_school_entry_reports --plan-only` classifies obvious
+metadata and selects ambiguous documents for download. After fetching that
+plan, rerun the parser with `--prune` to extract text, write the final
+classification, and retain only potential entrance evidence under `sources/`.
+It reached the whole directory for a couple of usable entrant distributions, so
+the cutoff tables above carry the school evidence instead.
 
 - `score` — 0-100 difficulty percentile among usable rows, combined across
   paths by average annual admitted seats.

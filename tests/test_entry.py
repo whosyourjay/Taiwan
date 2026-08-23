@@ -4,6 +4,8 @@ import random
 import unittest
 
 from fetch import entry as fetcher
+from lib.cap import MARKS, SUBJECTS
+from lib.html_table import tables
 from lib.paths import source_path
 from parse import cap, entry
 
@@ -55,7 +57,7 @@ class TestDistribution(unittest.TestCase):
             cap_row("5A0B0C", "17619", "7.77")
             + cap_row("4A1B0C", "10556", "4.66")
         )
-        self.assertEqual(cap.parse_html(html)[1]["students"], 10556)
+        self.assertEqual(cap.categories(tables(html))[1]["students"], 10556)
 
 
 class TestOfficialSources(unittest.TestCase):
@@ -72,8 +74,14 @@ class TestOfficialSources(unittest.TestCase):
     def test_cap_categories_sum_to_official_valid_candidates(self):
         source = source_path("entry", fetcher.SOURCES["cap-107-statistics"]["filename"])
         with open(source, encoding="utf-8") as f:
-            rows = cap.parse_html(f.read())
+            all_tables = tables(f.read())
+        rows = cap.categories(all_tables)
         self.assertEqual(sum(row["students"] for row in rows), 226639)
+        marks = cap.subject_marks(all_tables)
+        self.assertEqual(len(marks), len(SUBJECTS) * len(MARKS))
+        for subject in SUBJECTS:
+            share = sum(row["pct"] for row in marks if row["subject"] == subject)
+            self.assertAlmostEqual(share, 100.0, places=1)
 
 
 if __name__ == "__main__":

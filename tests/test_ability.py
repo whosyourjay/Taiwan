@@ -3,6 +3,7 @@
 import unittest
 
 import numpy as np
+from scipy.stats import norm
 
 from pool import ability
 
@@ -52,51 +53,99 @@ class TestRead(unittest.TestCase):
         self.assertEqual(levels, [1.0, 0.0])
 
 
+SCHOOLS = [-0.6, -0.2, 0.0, 0.4, 1.1, 1.9]
+SPREAD = 0.75
+
+
 class TestStar(unittest.TestCase):
-    """繁星 holds two floors, and the harder one is taken."""
+    """繁星 holds two floors, and the reading is the ability they leave standing."""
 
     def star(self, gpa, gates, seats=20):
         return row("star", seats, class_pct=100.0 - gpa, xuece_gates=gates)
 
-    def test_the_class_rank_needs_no_curve(self):
-        scored = ability.read([self.star(5.0, {})], STRAIGHT)
-        _, exam, level, _ = scored[0]
-        self.assertEqual(exam, ability.STAR)
-        self.assertAlmostEqual(level, 0.95)
+    def level(self, gpa, gates, schools=None):
+        scored = ability.read([self.star(gpa, gates)], STRAIGHT,
+                              SCHOOLS if schools is None else schools)
+        return scored[0][2]
 
-    def test_the_harder_of_the_two_floors_wins(self):
-        # Class rank 0.60 against a 學測 gate at the 80th percentile.
-        scored = ability.read([self.star(40.0, {"stem": 80.0})], STRAIGHT)
-        self.assertAlmostEqual(scored[0][2], 0.80)
+    def test_one_school_averages_its_own_top_slice(self):
+        # A lone average school: the top 5% of a N(0, 0.75) sit at 0.75*φ/0.05.
+        want = norm.cdf(SPREAD * norm.pdf(norm.isf(0.05)) / 0.05)
+        self.assertAlmostEqual(self.level(5.0, {}, [0.0]), want)
 
-    def test_the_class_rank_wins_when_it_binds_harder(self):
-        scored = ability.read([self.star(5.0, {"stem": 40.0})], STRAIGHT)
-        self.assertAlmostEqual(scored[0][2], 0.95)
+    def test_a_class_rank_beats_the_share_it_names(self):
+        # The top 5% of every school outrank far more than 95% of the country,
+        # because each school's slice is taken from its own middle upwards.
+        self.assertGreater(self.level(5.0, {}), 0.95)
+
+    def test_a_gate_never_lowers_the_reading(self):
+        for gpa in (2.0, 20.0, 60.0):
+            self.assertGreaterEqual(self.level(gpa, {"stem": 70.0}) + 1e-12,
+                                    self.level(gpa, {}))
 
     def test_the_strictest_subject_family_sets_the_gate(self):
-        scored = ability.read(
-            [self.star(50.0, {"stem": 60.0, "language": 88.0})], STRAIGHT)
-        self.assertAlmostEqual(scored[0][2], 0.88)
+        both = self.level(50.0, {"stem": 60.0, "language": 88.0})
+        self.assertAlmostEqual(both, self.level(50.0, {"language": 88.0}))
+
+    def test_a_gate_above_every_school_still_reads(self):
+        self.assertLessEqual(self.level(50.0, {"stem": 99.9}), 1.0)
 
     def test_繁星_scores_apart_from_the_學測_paths(self):
         scored = ability.read([self.star(5.0, {}, seats=100),
-                               row("apply", 100, cohort_top=0.5)], STRAIGHT)
+                               row("apply", 100, cohort_top=0.5)],
+                              STRAIGHT, SCHOOLS)
         got = ability.table(scored, ("school", "dept"),
                             ("gsat", ability.STAR))[0]
-        self.assertAlmostEqual(got[ability.STAR], 95.0)
         self.assertAlmostEqual(got["gsat"], 50.0)
-        self.assertAlmostEqual(got["ability"], 72.5)
+        self.assertGreater(got[ability.STAR], got["gsat"])
+        self.assertAlmostEqual(got["ability"],
+                               (got[ability.STAR] + got["gsat"]) / 2, places=1)
 
     def test_第八類_keeps_its_own_output_column(self):
         ordinary = self.star(5.0, {}, seats=100)
         eighth = self.star(2.0, {}, seats=20)
         eighth["path"] = "star_eight"
-        scored = ability.read([ordinary, eighth], STRAIGHT)
-        got = ability.table(scored, ("school", "dept"),
+        got = ability.table(ability.read([ordinary, eighth], STRAIGHT, SCHOOLS),
+                            ("school", "dept"),
                             (ability.STAR, ability.STAR_EIGHT))[0]
-        self.assertAlmostEqual(got[ability.STAR], 95.0)
-        self.assertAlmostEqual(got[ability.STAR_EIGHT], 98.0)
-        self.assertAlmostEqual(got["ability"], 95.5)
+        self.assertGreater(got[ability.STAR_EIGHT], got[ability.STAR])
+        self.assertAlmostEqual(
+            got["ability"],
+            (100 * got[ability.STAR] + 20 * got[ability.STAR_EIGHT]) / 120,
+            places=1)
+
+
+class TestStarFuzz(unittest.TestCase):
+    """Whatever the schools look like, the two bars can only push one way."""
+
+    def schools(self, rng):
+        return rng.normal(0.4, 0.7, size=rng.integers(2, 40))
+
+    def test_a_stricter_rank_reads_higher(self):
+        rng = np.random.default_rng(11)
+        for _ in range(200):
+            means, gate = self.schools(rng), rng.normal(0, 1)
+            loose, tight = sorted(rng.uniform(0.01, 0.9, size=2))[::-1]
+            strict = ability.qualifying_ability(tight, gate, means, SPREAD)
+            slack = ability.qualifying_ability(loose, gate, means, SPREAD)
+            self.assertGreaterEqual(strict + 1e-9, slack)
+
+    def test_a_stricter_gate_reads_higher(self):
+        rng = np.random.default_rng(12)
+        for _ in range(200):
+            means, rank = self.schools(rng), rng.uniform(0.01, 0.9)
+            low, high = sorted(rng.normal(0, 1.2, size=2))
+            self.assertGreaterEqual(
+                ability.qualifying_ability(rank, high, means, SPREAD) + 1e-9,
+                ability.qualifying_ability(rank, low, means, SPREAD))
+
+    def test_the_reading_never_sits_below_the_weakest_school(self):
+        rng = np.random.default_rng(13)
+        for _ in range(200):
+            means = self.schools(rng)
+            got = ability.qualifying_ability(rng.uniform(0.01, 0.9), None,
+                                             means, SPREAD)
+            self.assertGreater(got, means.min())
 
 
 class TestTable(unittest.TestCase):

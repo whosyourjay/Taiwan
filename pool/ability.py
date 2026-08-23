@@ -12,11 +12,13 @@ if __package__ in (None, ""):
     import _bootstrap  # noqa: F401
 
 import numpy as np
+from scipy.stats import norm
 
 from lib import tsvio
 from lib.english import english_names
 from lib.paths import ranking_path
 from pool import fit as pool_fit
+from pool import high_school
 from pool import tiling
 
 LEVELS = (
@@ -46,39 +48,79 @@ def held(spline, bottom):
     return float(np.clip(spline(bottom), 0.0, 1.0))
 
 
-def star_level(row, splines):
-    """繁星 quotes two floors: a 學測 gate and a rank inside the admittee's school.
+def star_bars(row):
+    """The pair 繁星 quotes: a share of one's own class, and a national ability.
 
-    A class rank already counts students, so under the assumption that schools
-    are alike it reads as an ability with no curve at all. The 學測 gate needs
-    one. Both are floors rather than the margin, so take whichever binds harder.
-    This is the naive reading of the pair, and wants replacing.
+    The rank is a share because it counts students inside a school. The 學測
+    gate is a national percentile, so it converts to a place on the ability
+    scale that every school's students are measured against.
     """
-    seen = []
+    rank = None
     if row.get("class_pct") is not None:
-        seen.append(float(row["class_pct"]) / 100.0)
+        rank = 1.0 - float(row["class_pct"]) / 100.0
     gates = row.get("xuece_gates") or {}
-    if gates and "gsat" in splines:
-        seen.append(held(splines["gsat"], max(gates.values()) / 100.0))
-    return max(seen) if seen else None
+    gate = None
+    if gates:
+        above = 1.0 - max(gates.values()) / 100.0
+        gate = float(norm.isf(above)) if 0 < above < 1 else None
+    return rank, gate
 
 
-def levels(row, splines):
+def qualifying_ability(rank, gate, means, spread):
+    """Mean ability of the students both bars leave eligible.
+
+    The size of that group says nothing, because the top tenth of every school
+    is exactly a tenth of the country however the schools are arranged. What
+    separates a strict rank from a loose one is who those students are: the top
+    tenth of a strong school stands far above the top tenth of a weak one, and
+    the gate then removes the weak schools' candidates outright.
+
+    So each school is cut at whichever bar binds it, the rank in its own terms
+    or the gate in national ones, and the survivors are averaged over schools.
+    """
+    means = np.asarray(means)
+    floor = np.full(means.shape, -np.inf)
+    if rank is not None:
+        floor = np.full(means.shape, float(norm.isf(rank)))
+    if gate is not None:
+        floor = np.maximum(floor, (gate - means) / spread)
+    left = norm.sf(floor)
+    if left.sum() <= 0:
+        return None
+    return float((means * left + spread * norm.pdf(floor)).sum() / left.sum())
+
+
+def star_level(row, splines, means, spread=high_school.SPREAD):
+    """繁星's two floors read as one ability, then priced by the curve."""
+    rank, gate = star_bars(row)
+    if rank is None and gate is None:
+        return None
+    level = qualifying_ability(rank, gate, means, spread)
+    if level is None:
+        return None
+    below = float(norm.cdf(level))
+    if "gsat" not in splines:
+        return below
+    return held(splines["gsat"], below)
+
+
+def levels(row, splines, means):
     """Every ability a row's thresholds imply, tagged by what produced each."""
     exam = pool_fit.exam_of(row)
     if exam is None:
         return []
     if row["path"] in (STAR, STAR_EIGHT):
-        level = star_level(row, splines)
+        level = star_level(row, splines, means)
         return [] if level is None else [(row["path"], level)]
     top = pool_fit.top_of(row) if exam in splines else None
     return [] if top is None else [(exam, held(splines[exam], 1.0 - top))]
 
 
-def read(rows, splines):
+def read(rows, splines, means=None):
     """Turn every readable threshold into an ability, through its own curve."""
+    means = high_school.atoms() if means is None else means
     return [(row, exam, level, float(row["seats"]))
-            for row in rows for exam, level in levels(row, splines)]
+            for row in rows for exam, level in levels(row, splines, means)]
 
 
 def collect(scored, columns):
