@@ -120,6 +120,57 @@ class TestStar(unittest.TestCase):
             places=1)
 
 
+class TestStarBugs(unittest.TestCase):
+    """Cases that were read wrongly before, kept so they cannot come back."""
+
+    def star(self, gpa, tops, seats=20, dept="電機系"):
+        return row("star", seats, dept=dept, class_pct=100.0 - gpa,
+                   xuece_tops=tops)
+
+    def level(self, gpa, tops, schools=None):
+        scored = ability.read([self.star(gpa, tops)], STRAIGHT,
+                              SCHOOLS if schools is None else schools, COHORT)
+        return scored[0][2] if scored else None
+
+    def test_a_wall_of_gates_is_rarer_than_its_strictest_bar(self):
+        # 臺大醫's four 頂標 bars were read as the single hardest of them.
+        grid = np.linspace(-4.5, 4.5, 600)
+        tops = [0.181, 0.141, 0.11, 0.14]
+        passing = ability.gate_pass(tops, grid)
+        share = float((passing * norm.pdf(grid) * (grid[1] - grid[0])).sum())
+        self.assertLess(share, min(tops))
+        self.assertGreater(share, float(np.prod(tops)))
+
+    def test_harder_gates_read_higher_at_the_same_rank(self):
+        # 頂標 of four subjects against 前標 of four, which had tied.
+        loose = self.level(3.0, [0.25, 0.25, 0.25, 0.25])
+        tight = self.level(3.0, [0.12, 0.12, 0.12, 0.12])
+        self.assertGreater(tight, loose)
+
+    def test_a_school_too_small_cannot_fill_a_one_percent_bar(self):
+        # Sixty graduates round their best student to 2%, so 1% reaches nobody.
+        self.assertIsNone(self.level(1.0, [], [(0.0, 60)]))
+        self.assertIsNotNone(self.level(1.0, [], [(0.0, 300)]))
+
+    def test_a_served_department_leaves_less_for_the_next(self):
+        alone = self.level(20.0, [])
+        strict = self.star(1.0, [], seats=4000)
+        loose = self.star(20.0, [], seats=20, dept="乙系")
+        scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT)
+        after = [got for r, _, got, _ in scored if r["dept"] == "乙系"][0]
+        self.assertLess(after, alone)
+
+    def test_第八類_draws_on_its_screen_not_its_quota(self):
+        def trailing(screen):
+            strict = self.star(1.0, [], seats=200)
+            strict["path"] = "star_eight"
+            strict["screened"] = screen
+            loose = self.star(20.0, [], seats=20, dept="乙系")
+            scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT)
+            return [got for r, _, got, _ in scored if r["dept"] == "乙系"][0]
+        self.assertLess(trailing(8000), trailing(200))
+
+
 class TestStarFuzz(unittest.TestCase):
     """Whatever the schools look like, the two bars can only push one way."""
 

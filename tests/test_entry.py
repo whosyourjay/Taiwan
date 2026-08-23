@@ -8,6 +8,9 @@ from lib.cap import MARKS, SUBJECTS
 from lib.html_table import tables
 from lib.paths import source_path
 from parse import cap, entry
+from pool import high_school
+
+FINE_NAME = high_school.FINE
 
 
 def cutoff_page(rows):
@@ -82,6 +85,39 @@ class TestOfficialSources(unittest.TestCase):
         for subject in SUBJECTS:
             share = sum(row["pct"] for row in marks if row["subject"] == subject)
             self.assertAlmostEqual(share, 100.0, places=1)
+
+
+class TestDistrictScales(unittest.TestCase):
+    """Each district's total has to be read on its own scale, not 基北's."""
+
+    def setUp(self):
+        self.tables = high_school.scales()
+
+    def test_every_readable_district_has_a_table(self):
+        self.assertIn(high_school.FINE, self.tables)
+        for name in high_school.COARSE:
+            self.assertIn(name, self.tables)
+
+    def test_桃連_is_the_coarse_grid_shifted_by_its_writing_points(self):
+        # 桃連 adds 寫作測驗 on top, so its 33 is 竹苗's 30 and nothing more.
+        coarse = self.tables["竹苗區"]
+        offset = high_school.COARSE["桃連區"]
+        for score, share in coarse.items():
+            self.assertAlmostEqual(self.tables["桃連區"][score + offset], share)
+
+    def test_five_精熟_is_the_top_of_the_coarse_grid(self):
+        coarse = self.tables["竹苗區"]
+        best = max(coarse)
+        self.assertEqual(best, 30.0)
+        self.assertLess(coarse[best], 0.10)
+        self.assertAlmostEqual(coarse[min(coarse)], 1.0, places=6)
+
+    def test_the_same_number_means_different_things_by_district(self):
+        # 30 is five 精熟 in a coarse district but demands A+ across 基北's
+        # finer scale, so reading every district on one table misplaces schools.
+        coarse = self.tables["竹苗區"][30.0]
+        fine = self.tables[FINE_NAME][30.0]
+        self.assertGreater(abs(coarse - fine), 0.01)
 
 
 if __name__ == "__main__":
