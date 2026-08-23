@@ -87,6 +87,19 @@ def midrank_top(counts, level):
     return (above + counts.get(level, 0.0) / 2) / total
 
 
+def empirical_buckets(counts):
+    """Ascending ``(percentile low, high, score, candidates)`` score buckets."""
+    total = sum(counts.values())
+    if total <= 0:
+        return []
+    below = 0.0
+    out = []
+    for score, count in sorted(counts.items()):
+        out.append((below / total, (below + count) / total, score, count))
+        below += count
+    return out
+
+
 def interpolate(xs, ys, x):
     """Linear interpolation, held constant beyond the observed endpoints."""
     i = bisect.bisect_right(xs, x)
@@ -215,6 +228,14 @@ class CohortPercentiles:
         tops = self.gate_top_fractions(year, gates)
         return 0.0 if not tops else 1.0 - min(tops)
 
+    def score_buckets(self, year, label):
+        """Exact percentile intervals for a published single/composite GSAT score."""
+        subjects = split_subjects(label)
+        if not subjects:
+            return []
+        counts = self.counts.get((str(year), "、".join(subjects)))
+        return empirical_buckets(counts) if counts else []
+
 
 class ScoreDistributions:
     def __init__(self, rows):
@@ -225,6 +246,7 @@ class ScoreDistributions:
                 key = (str(row["year"]), row["exam"], row["subject"])
                 grouped[key][float(row["score"])] += count
 
+        self.counts = grouped
         self.quantiles = {}
         for key, counts in grouped.items():
             scores, percentiles = midranks(counts)
@@ -233,6 +255,7 @@ class ScoreDistributions:
         for year, exam, subject in self.quantiles:
             self.by_exam[(year, exam)].add(subject)
         self.curves = {}
+        self.bucket_curves = {}
 
     @classmethod
     def load(cls, *paths):
@@ -313,6 +336,52 @@ class ScoreDistributions:
         grid, table = self.score_table(tuple(key for key, _ in subjects))
         weights = np.array([weight for _, weight in subjects])
         return float(np.interp(float(cutoff), weights @ table, grid))
+
+    def composite_buckets(self, subjects):
+        """Discrete weighted totals under the same equal-quantile model as `solve`.
+
+        Subject marginals do not reveal the real joint total. At each shared
+        quantile interval, this model assigns the score bucket from every
+        subject and sums them. Adjacent intervals with the same total remain one
+        tied composite-score bucket.
+        """
+        cache_key = tuple(subjects)
+        if cache_key in self.bucket_curves:
+            return self.bucket_curves[cache_key]
+        parts = [empirical_buckets(self.counts[key]) for key, _ in subjects]
+        highs = [[bucket[1] for bucket in buckets] for buckets in parts]
+        edges = sorted({edge for buckets in parts for bucket in buckets
+                        for edge in bucket[:2]})
+        out = []
+        for low, high in zip(edges, edges[1:]):
+            if high <= low:
+                continue
+            midpoint = (low + high) / 2
+            total = 0.0
+            for buckets, upper, (_, weight) in zip(parts, highs, subjects):
+                score = buckets[bisect.bisect_left(upper, midpoint)][2]
+                total += weight * score
+            total = round(total, 10)
+            if out and out[-1][2] == total:
+                out[-1] = (out[-1][0], high, total, out[-1][3] + high - low)
+            else:
+                out.append((low, high, total, high - low))
+        self.bucket_curves[cache_key] = out
+        return out
+
+    def formula_buckets(self, year, formula, exam="uac", group=None):
+        """Synthetic composite buckets for one published weighted formula."""
+        if exam == "uac":
+            key_of = lambda subject: self.subject_key(year, subject)
+        elif exam == "gsat":
+            def key_of(subject):
+                name = GSAT_FULL.get(subject, subject)
+                key = (str(year), "gsat", name)
+                return key if key in self.quantiles else None
+        else:
+            key_of = lambda subject: self.tongce_key(year, subject, group)
+        subjects = self.weighted_subjects(formula, key_of)
+        return self.composite_buckets(subjects) if subjects else []
 
     def formula_percentile(self, year, formula, cutoff):
         """Return the equal-subject quantile coordinate matching a total.

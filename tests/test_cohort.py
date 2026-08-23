@@ -62,6 +62,10 @@ class TestCohortPercentiles(unittest.TestCase):
         self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 14), 0.25)
         self.assertAlmostEqual(self.cohort.top_fraction("114", "國文", 13), 0.70)
 
+    def test_score_buckets_retain_the_full_tied_interval(self):
+        got = self.cohort.score_buckets("114", "國文")
+        self.assertEqual(got[-1], (0.9, 1.0, 15.0, 10.0))
+
     def test_unknown_subject_or_year_is_none(self):
         self.assertIsNone(self.cohort.top_fraction("114", "英聽", 5))
         self.assertIsNone(self.cohort.top_fraction("113", "國文", 15))

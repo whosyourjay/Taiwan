@@ -37,6 +37,11 @@ class TestScoreDistributions(unittest.TestCase):
         got = self.scores.formula_percentile("114", "國x1.00 英x1.00", 15)
         self.assertAlmostEqual(got, 0.5, places=9)
 
+    def test_formula_buckets_keep_discrete_equal_quantile_totals(self):
+        got = self.scores.formula_buckets("114", "國x1.00 英x1.00")
+        self.assertEqual(got, [(0.0, 0.5, 0.0, 0.5),
+                               (0.5, 1.0, 30.0, 0.5)])
+
     def test_routes_xuece_and_zhikao_subjects_separately(self):
         self.assertEqual(self.scores.subject_key("114", "國")[1], "xuece")
         self.assertEqual(self.scores.subject_key("114", "數甲")[1], "zhikao")
