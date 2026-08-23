@@ -138,6 +138,12 @@ def load_star(group="one2seven", cohort=None):
             star_gate_families(cohort, row["year"], row["gates"])
             if cohort is not None else {}
         )
+        # Every subject's own bar, kept apart. A department asking 頂標 of four
+        # subjects wants far more than the strictest one of them says.
+        row["xuece_tops"] = (
+            [top for _, top in cohort.binding_gates(row["year"], row["gates"])]
+            if cohort is not None else []
+        )
         # Class rank is national only under the equal-school assumption. The
         # jointly fitted component also uses the family-specific 學測 gates.
         row["basis"] = row["class_pct"]

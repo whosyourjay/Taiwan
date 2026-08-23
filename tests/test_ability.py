@@ -61,38 +61,41 @@ COHORT = 200_000
 class TestStar(unittest.TestCase):
     """繁星 holds two floors, and the reading is the ability they leave standing."""
 
-    def star(self, gpa, gates, seats=20):
-        return row("star", seats, class_pct=100.0 - gpa, xuece_gates=gates)
+    def star(self, gpa, tops, seats=20):
+        return row("star", seats, class_pct=100.0 - gpa, xuece_tops=tops)
 
-    def level(self, gpa, gates, schools=None):
-        scored = ability.read([self.star(gpa, gates)], STRAIGHT,
+    def level(self, gpa, tops, schools=None):
+        scored = ability.read([self.star(gpa, tops)], STRAIGHT,
                               SCHOOLS if schools is None else schools, COHORT)
         return scored[0][2]
 
     def test_one_school_averages_its_own_top_slice(self):
         # A lone average school: the top 5% of a N(0, 0.75) sit at 0.75*φ/0.05.
         want = norm.cdf(SPREAD * norm.pdf(norm.isf(0.05)) / 0.05)
-        self.assertAlmostEqual(self.level(5.0, {}, [0.0]), want, places=3)
+        self.assertAlmostEqual(self.level(5.0, [], [0.0]), want, places=3)
 
     def test_a_class_rank_beats_the_share_it_names(self):
         # The top 5% of every school outrank far more than 95% of the country,
         # because each school's slice is taken from its own middle upwards.
-        self.assertGreater(self.level(5.0, {}), 0.95)
+        self.assertGreater(self.level(5.0, []), 0.95)
 
     def test_a_gate_never_lowers_the_reading(self):
         for gpa in (2.0, 20.0, 60.0):
-            self.assertGreaterEqual(self.level(gpa, {"stem": 70.0}) + 1e-12,
-                                    self.level(gpa, {}))
+            self.assertGreaterEqual(self.level(gpa, [0.30]) + 1e-12,
+                                    self.level(gpa, []))
 
-    def test_the_strictest_subject_family_sets_the_gate(self):
-        both = self.level(50.0, {"stem": 60.0, "language": 88.0})
-        self.assertAlmostEqual(both, self.level(50.0, {"language": 88.0}))
+    def test_every_subject_bar_counts_not_just_the_strictest(self):
+        # Asking the same bar of a second subject is a real extra demand, so it
+        # has to read higher than asking it of one.
+        one = self.level(50.0, [0.12])
+        two = self.level(50.0, [0.12, 0.12])
+        self.assertGreater(two, one)
 
     def test_a_gate_above_every_school_still_reads(self):
-        self.assertLessEqual(self.level(50.0, {"stem": 99.9}), 1.0)
+        self.assertLessEqual(self.level(50.0, [0.001]), 1.0)
 
     def test_繁星_scores_apart_from_the_學測_paths(self):
-        scored = ability.read([self.star(5.0, {}, seats=100),
+        scored = ability.read([self.star(5.0, [], seats=100),
                                row("apply", 100, cohort_top=0.5)],
                               STRAIGHT, SCHOOLS, COHORT)
         got = ability.table(scored, ("school", "dept"),
@@ -103,8 +106,8 @@ class TestStar(unittest.TestCase):
                                (got[ability.STAR] + got["gsat"]) / 2, places=1)
 
     def test_第八類_keeps_its_own_output_column(self):
-        ordinary = self.star(5.0, {}, seats=100)
-        eighth = self.star(2.0, {}, seats=20)
+        ordinary = self.star(5.0, [], seats=100)
+        eighth = self.star(2.0, [], seats=20)
         eighth["path"] = "star_eight"
         got = ability.table(ability.read([ordinary, eighth], STRAIGHT,
                                          SCHOOLS, COHORT),

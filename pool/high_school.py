@@ -12,6 +12,8 @@ the ceiling.
 """
 
 import collections
+import re
+import statistics
 import sys
 
 if __package__ in (None, ""):
@@ -26,6 +28,7 @@ from pool.entry_score import grade_scores
 CUTOFFS = "high-school-entry-cutoffs.tsv"
 ENTRY_SCORES = "cap-entry-scores.tsv"
 CATEGORIES = "cap-grade-distributions.tsv"
+SIZES = "high-school-sizes.tsv"
 OUTPUT = "high-school-ability.tsv"
 # 基北 is the only district whose total separates A++ from a bare A.
 FINE = "基北區"
@@ -84,8 +87,22 @@ def cutoff_levels():
     return sorted(out, key=lambda row: -row["cutoff_z"]), skipped
 
 
+def cohorts(year=ATOM_YEAR):
+    """Graduating cohort per school name, for the year the atoms come from."""
+    out = {}
+    for row in tsvio.read_rows(data_path(SIZES)):
+        if row["year"] == year and int(row["graduates"]):
+            out[trimmed(row["school"])] = int(row["graduates"])
+    return out
+
+
+def trimmed(name):
+    """A school name without the prefix that says who runs it."""
+    return re.sub(r"^(國立|市立|私立|縣立)", "", name).strip()
+
+
 def atoms(year=ATOM_YEAR):
-    """Each school's ability mean, as the empirical set 繁星 recommends from.
+    """Each school's ability mean and cohort size, as 繁星 recommends from them.
 
     A cutoff sits below the school's own CAP mean, while its ability mean sits
     below where its CAP standing would put it, because three years of schooling
@@ -93,7 +110,11 @@ def atoms(year=ATOM_YEAR):
     cutoff stands as the estimate and the offsets are left to cancel.
     """
     rows, _ = cutoff_levels()
-    return [row["cutoff_z"] for row in rows if row["year"] == year]
+    sizes = cohorts(year)
+    placed = [row for row in rows if row["year"] == year]
+    typical = statistics.median(sizes.values()) if sizes else 0
+    return [(row["cutoff_z"], sizes.get(trimmed(row["school"]), typical))
+            for row in placed]
 
 
 def report(rows, skipped, out=sys.stderr):

@@ -28,6 +28,11 @@ LEVELS = (
 )
 STAR = "star"
 STAR_EIGHT = "star_eight"
+GRID = 600
+REACH = 4.5
+# How tightly one 學測 subject tracks ability. The CAP subjects fit 0.897
+# against their own joint counts, and 學測 is the same kind of exam.
+SUBJECT_LOAD = 0.9
 
 
 def curves():
@@ -49,21 +54,40 @@ def held(spline, bottom):
 
 
 def star_bars(row):
-    """The pair 繁星 quotes: a share of one's own class, and a national ability.
+    """What 繁星 quotes: a share of one's own school, and a bar in each subject.
 
     The rank is a share because it counts students inside a school. The 學測
-    gate is a national percentile, so it converts to a place on the ability
-    scale that every school's students are measured against.
+    gates are national, one per subject, and every one of them has to be
+    cleared, so a department asking 頂標 of four subjects wants far more than
+    the strictest single bar admits.
     """
     rank = None
     if row.get("class_pct") is not None:
         rank = 1.0 - float(row["class_pct"]) / 100.0
-    gates = row.get("xuece_gates") or {}
-    gate = None
-    if gates:
-        above = 1.0 - max(gates.values()) / 100.0
-        gate = float(norm.isf(above)) if 0 < above < 1 else None
-    return rank, gate
+    tops = [top for top in (row.get("xuece_tops") or []) if 0.0 < top < 1.0]
+    return rank, tops
+
+
+def one_gate(tops):
+    """The strictest single subject bar, as a place on the ability scale."""
+    return float(norm.isf(min(tops))) if tops else None
+
+
+def gate_pass(tops, level, load=SUBJECT_LOAD):
+    """Chance of clearing every subject bar at each ability.
+
+    A subject score is this ability plus its own noise, so the subjects agree
+    often but not always. Clearing four bars is therefore far rarer than
+    clearing the hardest one and far commoner than four independent draws, and
+    only the whole product says where a wall of 頂標 actually lands.
+    """
+    if not tops:
+        return np.ones_like(level)
+    spread = (1.0 - load ** 2) ** 0.5
+    out = np.ones_like(level)
+    for top in tops:
+        out = out * norm.sf((norm.isf(top) - load * level) / spread)
+    return out
 
 
 def eligible_floors(rank, gate, means, spread):
@@ -123,64 +147,88 @@ def marginal_ability(rank, gate, means, spread, wanted, cohort):
     return 0.5 * (low + high)
 
 
-GRID = 600
-REACH = 4.5
+DEFAULT_COHORT = 300
 
 
-def pool_grid(means, spread):
+def paired(atoms):
+    """Accept bare school means as well as (mean, cohort size) pairs."""
+    return [item if isinstance(item, tuple) else (item, DEFAULT_COHORT)
+            for item in atoms]
+
+
+def pool_grid(atoms, spread):
     """Ability grid and the weight each school starts with on it."""
-    edges = np.linspace(-REACH, REACH, GRID)
-    step = edges[1] - edges[0]
-    means = np.asarray(means, dtype=float)
-    weight = norm.pdf((edges[None, :] - means[:, None]) / spread) / spread
-    return edges, weight * step / len(means)
+    level = np.linspace(-REACH, REACH, GRID)
+    step = level[1] - level[0]
+    means = np.array([mean for mean, _ in atoms], dtype=float)
+    weight = norm.pdf((level[None, :] - means[:, None]) / spread) / spread
+    return level, weight * step / len(atoms)
 
 
-def draw(weight, edges, cut, wanted):
-    """Mean ability above each school's cut, and the pool left behind.
+def rank_cuts(rank, atoms, means, spread, level):
+    """Grid index where each school's class-rank bar falls.
 
-    A department takes its own share of everyone still standing above its bars.
-    It does not take them cleanly, because the next department down draws from
-    the same people, so the places it fills are thinned rather than removed.
+    The published rank is a whole percent rounded up, so a school of 300 can
+    put forward three students at 1% and a school of 60 can put forward none.
+    Taking the count first and the share second keeps that.
     """
-    reach = np.arange(len(edges))[None, :] >= cut[:, None]
-    live = weight * reach
+    if rank is None:
+        return np.zeros(len(atoms), dtype=int)
+    counted = np.array([int(rank * size) for _, size in atoms], dtype=float)
+    sizes = np.array([size for _, size in atoms], dtype=float)
+    shares = np.divide(counted, sizes, out=np.zeros_like(sizes), where=sizes > 0)
+    cuts = np.where(shares > 0, means + spread * norm.isf(np.clip(shares, 1e-12, 1)),
+                    np.inf)
+    return np.searchsorted(level, cuts)
+
+
+def draw(weight, level, cuts, passing, wanted):
+    """Mean ability of everyone a department can reach, and the pool it leaves.
+
+    It does not take those people cleanly, because the departments behind it
+    draw on the same students, so the places it fills are thinned rather than
+    removed.
+    """
+    reach = np.arange(len(level))[None, :] >= cuts[:, None]
+    live = weight * reach * passing[None, :]
     mass = live.sum()
     if mass <= 0:
         return None, weight
-    level = float((live * edges[None, :]).sum() / mass)
+    found = float((live * level[None, :]).sum() / mass)
     left = max(0.0, 1.0 - wanted / mass)
-    return level, np.where(reach, weight * left, weight)
+    return found, weight - live * (1.0 - left)
 
 
-def star_sweep(rows, means, cohort, spread=high_school.SPREAD):
-    """Read every 繁星 department, best bars first, thinning the pool as it goes.
+def star_sweep(rows, atoms, cohort, spread=high_school.SPREAD):
+    """Read every 繁星 department, strictest first, thinning the pool as it goes.
 
-    Ordering by each department's own bars keeps the published ranking out of
-    the score. Sweeping in that order lets a department that has already been
-    served leave the ones behind it a shallower pool, which is the only way a
-    threshold reading can tell two departments with the same bars apart.
+    Ordering by what each department's own bars reach keeps the published
+    ranking out of the score, and sweeping in that order lets a department
+    already served leave a shallower pool to the ones behind it.
     """
-    edges, weight = pool_grid(means, spread)
-    means = np.asarray(means, dtype=float)
-    wanted, floors, order = {}, {}, []
+    atoms = paired(atoms)
+    level, start = pool_grid(atoms, spread)
+    means = np.array([mean for mean, _ in atoms], dtype=float)
+    ready = []
     for row in rows:
         if row["path"] not in (STAR, STAR_EIGHT):
             continue
-        rank, gate = star_bars(row)
-        if rank is None and gate is None:
+        rank, tops = star_bars(row)
+        if rank is None and not tops:
             continue
-        _, floor = eligible_floors(rank, gate, means, spread)
-        floors[id(row)] = np.searchsorted(edges, means + spread * floor)
-        wanted[id(row)] = float(row.get("screened") or row.get("seats") or 0)
-        order.append((qualifying_ability(rank, gate, means, spread), row))
-    order.sort(key=lambda pair: -(pair[0] if pair[0] is not None else -np.inf))
-    out = {}
-    for _, row in order:
-        level, weight = draw(weight, edges, floors[id(row)],
-                             wanted[id(row)] / cohort)
-        if level is not None:
-            out[id(row)] = level
+        cuts = rank_cuts(rank, atoms, means, spread, level)
+        passing = gate_pass(tops, level)
+        alone, _ = draw(start, level, cuts, passing, 0.0)
+        if alone is None:
+            continue
+        wanted = float(row.get("screened") or row.get("seats") or 0) / cohort
+        ready.append((alone, row, cuts, passing, wanted))
+    ready.sort(key=lambda item: -item[0])
+    weight, out = start, {}
+    for _, row, cuts, passing, wanted in ready:
+        found, weight = draw(weight, level, cuts, passing, wanted)
+        if found is not None:
+            out[id(row)] = found
     return out
 
 
