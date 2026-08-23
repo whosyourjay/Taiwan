@@ -1,10 +1,11 @@
 Better data source for these png files
 Tongce and xuece curved percentiles are biased because students who take zhikao do not appear in university seats
 Fenfa / zhikao scores are currently just use 1-subtest scores. They should be polarized slightly to account for correlation <1.
-Total population of students in a year. Let's just use admitted student body and we can as a super-final step add a chunk at the bottom for people who don't go to college.
+Total population of students in a year. We should use anyone who took a test. We tied the test curves together with seats by school/major.
 Xuece for all other years
 Better way to handle class + xuece
   Class rank appears too high because some people don't go to college. Add this lower bound to the other tests.
+  The person right above the cutoff will simply be the xuece rank in most cases. But it may be a higher ranked person for top medical schools.
 
 Fix art ranking. E.g. rank schools on individual exams somehow, or rank by groups that share the same set of exams.
 
@@ -21,36 +22,19 @@ To determine someone's skill
   2. Ask major
   3. Check they didn't get in on sports
 
-High schools
-  科學班
-
-
-As a followup, we could try to simulate a correlation between high school GPA and xuece. Or we could simulate different means and sds at different high schools on xuece combining with the cutoff.
-
 
 In ceec_score.py, add a lookup keyed on (year, subject-set, level) returning the cohort percentile, with the abbreviation map (國英數自 → 國文、英文、數學、自然) since CAC prints both spellings. Then in parse_apply.py or load_apply(), set basis from that instead of norm — keeping norm in the TSV so the existing bridge stays reproducible and the two can be compared.
 
-That's a real ranking change, not a refactor, so I'd rather you call it: swap apply onto the percentile basis, or land the lookup first and diff the two rankings before committing to it?
-  --- Can you explain all this with some nice diagrams?
-
 
 How to fit tests
+  Currently we are taking admit counts as distribution. But many people take the test and then don't admit. Take X-ce then Zhikao, then don't admit.
   We have unknown pools of students taking the 3 tests (xuece, tongce, zhikao)
-  We fit a piecewise linear function (or step function if that's easier) to the pdfs of these three functions
-  Integrals must match the observed number of students
-  Probably we only want 2-3 steps or 2 linear pieces for each test. Optimize to reduce error in the agreement between thresholds where they overlap.
   Test outcomes are percentiles in the test taker pool. All we want is to convert these to percentiles in the original pool. There is no need for any other fancy distortion or correlation.
 
-I determined that 2 steps = 3 parameters, 2 lines = 5 parameters, 3 steps = 5 parameters, etc. If it's not too expensive we could fit more steps/lines or even higher order polynomials. But we should probably require the curves to me unimodal. And using too many parameters leads to overfitting so 3 steps is  fine for now.
 
-There are 400-600 senior high schools. Is it realistic for us to get the matrix of which high schools are sending students to which universities? Or perhaps get this data for just a few top high schools or top universities?
-
-
-Consider the following model: all measurements have some underlying correlation matrix. E.g. ranks in class, xuece, tongce, and zhikao. Simultaneous thresholds on rank + xuece gives us a distribution over underlying ability. Xuece (low) + zhikao (high) give us another. One threshold on xuece, or tongce give a different distribution. The school will likely try to make the median or mean match.
-
+Xuece (low) + zhikao (high) means a lower rank than you would assume from zhikao alone
   - 學測個申: 65,453 passed stage 1; 44,025 were finally allocated — about 67%.
   - 統測甄選: 36,800 passed stage 1; 27,839 received at least one 正/備取 qualification — about 76%; 24,421 were finally allocated — about 66%.
-
 a department normally screens about 3× its quota, while each student applies to several departments
 
 24 matched 第八類 department-years.
@@ -60,8 +44,7 @@ a department normally screens about 3× its quota, while each student applies to
 The interviews for 統測 and 學測 are somewhere between 1.5x and 3x filters. Although a student might still end up at the school they want, they might get pushed to a worse department. I don't have a good way to handle this.
 
 
-繁星 rank is within-school. The published cutoff is one national class-rank bar applied inside every nominating school, so the admitted set is a mixture over school means μ_s. That's a second
-  quadrature
+繁星 rank is within-school. The published cutoff is one national class-rank bar applied inside every nominating school, so the admitted set is a mixture over school means μ_s. That's a second quadrature
     dimension and one variance parameter. Nothing in the 繁星 cutoffs identifies the spread of μ_s — but high-school-destinations.tsv does, which is the natural use for that table. ---- I'm hesitant to
   add complexity here. Do it without this at first and explain in a note somewhere how we would tack it on. ----- Screen ≠ admit. For 個申 and 甄選 the threshold is a 1.5–3× screen with review after, so
   you need E[A | passed screen, top by review], with review as one more loaded measurement. That's your 24 matched
@@ -79,3 +62,61 @@ Before adding that output, make the ranking input year-specific: the 110 curve s
 4. Map UAC/統測/個申 bars through it; aggregate those mapped values to departments and universities.
 
 A large share of 學測 takers end up with no placeable seat: they apply and miss, take a 專科 place, repeat the year
+
+Ok so cap-grade-distributions.tsv plus marginals allows us to simulate the full joint distribution. E.g. something like Bayes' rule - multiply the probabilities of a grade in each marginal. Scale by A/B/C count.
+
+
+
+  │        Source        │ Coverage  │                          Pros                           │                       Cons                       │
+  ├──────────────────────┼───────────┼─────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+  │                      │ ~all      │ Recommending school is intrinsic to the scheme, so it   │ Quota-capped at ~2 per 學群 per school, so it    │
+  │ 繁星 錄取名單 (UAC)  │ academic  │ should be in the results. One file, near-comprehensive. │ only sees each school's top few — good for μ,    │
+  │                      │ HS        │  Press tables like "各高中繁星上台大人數" imply the raw │ nearly blind to σ. Calibrating the star model on │
+  │                      │           │  data is public.                                        │  star outcomes is circular; needs a holdout.     │
+  ├──────────────────────┼───────────┼─────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+  │                      │           │                                                         │ I doubt it's published by high school — 分發     │
+  │ 個申 / 分發 錄取名單 │ most of   │ Uncensored, full distribution per school, would settle  │ lists 考生號碼, 個申 lists by 校系. Privacy      │
+  │                      │ cohort    │ μ and σ together.                                       │ rules have tightened. Worth one check, low       │
+  │                      │           │                                                         │ expected yield.                                  │
+  ├──────────────────────┼───────────┼─────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+  │                      │           │                                                         │ Per-school hunt, and the crawl says discovery is │
+  │ School-published     │ opt-in    │ Exactly what worked for 北一女: rich,                   │  terrible. Strong schools publish, weak ones     │
+  │ 升學榜單             │           │ multi-destination, uncensored.                          │ don't — bias concentrated where I most need the  │
+  │                      │           │                                                         │ data.                                            │
+  ├──────────────────────┼───────────┼─────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+  │ 高中優質化/均質化    │ opt-in    │ Some carry CAP entry distributions outright (百齡高中   │ 1 usable hit per ~250 schools crawled. Dead end  │
+  │ reports              │           │ had bins plus PR values).                               │ at scale.                                        │
+  ├──────────────────────┼───────────┼─────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┤
+  │ Aggregator sites     │ broad     │ Already pivoted to per-school tables; easy to parse.    │ Third-party, unstated methodology, unknown year  │
+  │ (大學問, 104 升學)   │           │                                                         │ alignment.                                       │
+  └──────────────────────┴───────────┴─────────────────────────────────────────────────────────┴──────────────────────────────────────────────────┘
+  
+  B. Entry cutoffs — gives ordering, not level
+  
+  ┌─────────────────────┬───────────┬─────────────────────────────────────────────┬────────────────────────────────────────────────────────────────┐
+  │       Source        │ Coverage  │                    Pros                     │                              Cons                              │
+  ├─────────────────────┼───────────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ 基北 36-point       │ 52        │ Have it. Pure CAP function, so my model     │ One district, and the district least relevant to 繁星. Floor,  │
+  │ cutoffs             │ schools   │ inverts it to a national percentile.        │ not mean.                                                      │
+  ├─────────────────────┼───────────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Other 14 districts' │ ~all      │ Nearly comprehensive, official, published   │ Each district's 超額比序 mixes CAP marks with                  │
+  │  免試 錄取標準      │ schools   │ yearly.                                     │ 志願序/均衡學習/服務學習, so cutoffs aren't comparable across  │
+  │                     │           │                                             │ districts.                                                     │
+  ├─────────────────────┼───────────┼─────────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ Cram-school 落點    │ ~all      │ Often already normalized to CAP marks       │ Third-party quality, same tier as the 基北 source I already    │
+  │ tables              │ schools   │ across districts, which fixes the scale     │ have.                                                          │
+  │                     │           │ problem.                                    │                                                                │
+  └─────────────────────┴───────────┴─────────────────────────────────────────────┴────────────────────────────────────────────────────────────────┘
+  
+  The scale problem in B is fixable rather than fatal: cutoffs order schools correctly within a district, so two or three schools per district with a
+  known μ from A pin that district's affine transform. That's a hybrid, not a feature model.
+  
+  C. Features — comprehensive, zero ability content
+  
+  ┌───────────────────────┬───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────┐
+  │        Source         │                                     Pros                                      │                  Cons                  │
+  ├───────────────────────┼───────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────┤
+  │ 財政部 綜所稅 by      │ Strong predictor of school intake, comprehensive.                             │ Ecological — district income, not      │
+  │ 鄉鎮市區              │                                                                               │ school intake. 
+
+The top decile is the regime where the model's assumption holds, and there it does exactly what you described: 繁星's two bars together select students about 5 ability points above what the 學測 cutoff alone implies. Below that it overshoots badly, and the reason is structural rather than a tuning problem. I compute the mean ability of everyone the bars make eligible nationally. A competitive department really does draw from that whole pool. A department in the 20–29 decile does not — only weak schools apply to it, so its admits are the bottom of the eligible pool, not its average.  Nothing in the data says which schools apply where

@@ -29,7 +29,10 @@ CATEGORIES = "cap-grade-distributions.tsv"
 OUTPUT = "high-school-ability.tsv"
 # 基北 is the only district whose total separates A++ from a bare A.
 FINE = "基北區"
-COARSE = ("竹苗區", "中投區", "高雄區")
+# Districts scoring only 精熟, 基礎 and 待加強. 桃連 adds 寫作測驗 worth up to
+# three points on top of the same grid, and every cutoff it publishes carries
+# the full three.
+COARSE = {"竹苗區": 0.0, "中投區": 0.0, "高雄區": 0.0, "桃連區": 3.0}
 # The year covering four districts rather than one.
 ATOM_YEAR = "114"
 # Within-school spread on the ability scale. PISA 2022 puts 38% of Chinese
@@ -52,7 +55,9 @@ def scales():
     fine = {float(row["score"]): float(row["pct_at_or_above"]) / 100
             for row in tsvio.read_rows(data_path(ENTRY_SCORES))}
     coarse = running(grade_scores(tsvio.read_rows(data_path(CATEGORIES))))
-    return {FINE: fine, **{name: coarse for name in COARSE}}
+    shifted = {name: {score + offset: share for score, share in coarse.items()}
+               for name, offset in COARSE.items()}
+    return {FINE: fine, **shifted}
 
 
 def cutoff_levels():

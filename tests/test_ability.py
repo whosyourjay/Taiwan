@@ -55,6 +55,7 @@ class TestRead(unittest.TestCase):
 
 SCHOOLS = [-0.6, -0.2, 0.0, 0.4, 1.1, 1.9]
 SPREAD = 0.75
+COHORT = 200_000
 
 
 class TestStar(unittest.TestCase):
@@ -65,13 +66,13 @@ class TestStar(unittest.TestCase):
 
     def level(self, gpa, gates, schools=None):
         scored = ability.read([self.star(gpa, gates)], STRAIGHT,
-                              SCHOOLS if schools is None else schools)
+                              SCHOOLS if schools is None else schools, COHORT)
         return scored[0][2]
 
     def test_one_school_averages_its_own_top_slice(self):
         # A lone average school: the top 5% of a N(0, 0.75) sit at 0.75*φ/0.05.
         want = norm.cdf(SPREAD * norm.pdf(norm.isf(0.05)) / 0.05)
-        self.assertAlmostEqual(self.level(5.0, {}, [0.0]), want)
+        self.assertAlmostEqual(self.level(5.0, {}, [0.0]), want, places=3)
 
     def test_a_class_rank_beats_the_share_it_names(self):
         # The top 5% of every school outrank far more than 95% of the country,
@@ -93,7 +94,7 @@ class TestStar(unittest.TestCase):
     def test_繁星_scores_apart_from_the_學測_paths(self):
         scored = ability.read([self.star(5.0, {}, seats=100),
                                row("apply", 100, cohort_top=0.5)],
-                              STRAIGHT, SCHOOLS)
+                              STRAIGHT, SCHOOLS, COHORT)
         got = ability.table(scored, ("school", "dept"),
                             ("gsat", ability.STAR))[0]
         self.assertAlmostEqual(got["gsat"], 50.0)
@@ -105,7 +106,8 @@ class TestStar(unittest.TestCase):
         ordinary = self.star(5.0, {}, seats=100)
         eighth = self.star(2.0, {}, seats=20)
         eighth["path"] = "star_eight"
-        got = ability.table(ability.read([ordinary, eighth], STRAIGHT, SCHOOLS),
+        got = ability.table(ability.read([ordinary, eighth], STRAIGHT,
+                                         SCHOOLS, COHORT),
                             ("school", "dept"),
                             (ability.STAR, ability.STAR_EIGHT))[0]
         self.assertGreater(got[ability.STAR_EIGHT], got[ability.STAR])

@@ -66,36 +66,97 @@ def star_bars(row):
     return rank, gate
 
 
-def qualifying_ability(rank, gate, means, spread):
-    """Mean ability of the students both bars leave eligible.
+def eligible_floors(rank, gate, means, spread):
+    """Where each school's students stop qualifying, in that school's own terms.
 
-    The size of that group says nothing, because the top tenth of every school
-    is exactly a tenth of the country however the schools are arranged. What
-    separates a strict rank from a loose one is who those students are: the top
-    tenth of a strong school stands far above the top tenth of a weak one, and
-    the gate then removes the weak schools' candidates outright.
-
-    So each school is cut at whichever bar binds it, the rank in its own terms
-    or the gate in national ones, and the survivors are averaged over schools.
+    The size of the qualifying group says nothing on its own, because the top
+    tenth of every school is a tenth of the country however the schools are
+    arranged. What the bars settle is who those students are, and they bind
+    school by school: the rank cuts every school at the same depth, while the
+    gate cuts deeper the weaker the school, until it passes above one entirely.
     """
-    means = np.asarray(means)
+    means = np.asarray(means, dtype=float)
     floor = np.full(means.shape, -np.inf)
     if rank is not None:
         floor = np.full(means.shape, float(norm.isf(rank)))
     if gate is not None:
         floor = np.maximum(floor, (gate - means) / spread)
+    return means, floor
+
+
+def qualifying_ability(rank, gate, means, spread):
+    """Mean ability of everyone both bars leave eligible."""
+    means, floor = eligible_floors(rank, gate, means, spread)
     left = norm.sf(floor)
     if left.sum() <= 0:
         return None
     return float((means * left + spread * norm.pdf(floor)).sum() / left.sum())
 
 
-def star_level(row, splines, means, spread=high_school.SPREAD):
-    """繁星's two floors read as one ability, then priced by the curve."""
-    rank, gate = star_bars(row)
-    if rank is None and gate is None:
-        return None
-    level = qualifying_ability(rank, gate, means, spread)
+GRID = 600
+REACH = 4.5
+
+
+def pool_grid(means, spread):
+    """Ability grid and the weight each school starts with on it."""
+    edges = np.linspace(-REACH, REACH, GRID)
+    step = edges[1] - edges[0]
+    means = np.asarray(means, dtype=float)
+    weight = norm.pdf((edges[None, :] - means[:, None]) / spread) / spread
+    return edges, weight * step / len(means)
+
+
+def draw(weight, edges, cut, wanted):
+    """Mean ability above each school's cut, and the pool left behind.
+
+    A department takes its own share of everyone still standing above its bars.
+    It does not take them cleanly, because the next department down draws from
+    the same people, so the places it fills are thinned rather than removed.
+    """
+    reach = np.arange(len(edges))[None, :] >= cut[:, None]
+    live = weight * reach
+    mass = live.sum()
+    if mass <= 0:
+        return None, weight
+    level = float((live * edges[None, :]).sum() / mass)
+    left = max(0.0, 1.0 - wanted / mass)
+    return level, np.where(reach, weight * left, weight)
+
+
+def star_sweep(rows, means, cohort, spread=high_school.SPREAD):
+    """Read every 繁星 department, best bars first, thinning the pool as it goes.
+
+    Ordering by each department's own bars keeps the published ranking out of
+    the score. Sweeping in that order lets a department that has already been
+    served leave the ones behind it a shallower pool, which is the only way a
+    threshold reading can tell two departments with the same bars apart.
+    """
+    edges, weight = pool_grid(means, spread)
+    means = np.asarray(means, dtype=float)
+    wanted, floors, order = {}, {}, []
+    for row in rows:
+        if row["path"] not in (STAR, STAR_EIGHT):
+            continue
+        rank, gate = star_bars(row)
+        if rank is None and gate is None:
+            continue
+        _, floor = eligible_floors(rank, gate, means, spread)
+        floors[id(row)] = np.searchsorted(edges, means + spread * floor)
+        wanted[id(row)] = float(row.get("screened") or row.get("seats") or 0)
+        order.append((qualifying_ability(rank, gate, means, spread), row))
+    order.sort(key=lambda pair: -(pair[0] if pair[0] is not None else -np.inf))
+    out = {}
+    for _, row in order:
+        level, weight = draw(weight, edges, floors[id(row)],
+                             wanted[id(row)] / cohort)
+        if level is not None:
+            out[id(row)] = level
+    return out
+
+
+def star_level(row, splines, swept):
+    """繁星's reading, priced by the same curve as every other threshold."""
+    level = swept.get(id(row))
     if level is None:
         return None
     below = float(norm.cdf(level))
@@ -104,23 +165,26 @@ def star_level(row, splines, means, spread=high_school.SPREAD):
     return held(splines["gsat"], below)
 
 
-def levels(row, splines, means):
+def levels(row, splines, swept):
     """Every ability a row's thresholds imply, tagged by what produced each."""
     exam = pool_fit.exam_of(row)
     if exam is None:
         return []
     if row["path"] in (STAR, STAR_EIGHT):
-        level = star_level(row, splines, means)
+        level = star_level(row, splines, swept)
         return [] if level is None else [(row["path"], level)]
     top = pool_fit.top_of(row) if exam in splines else None
     return [] if top is None else [(exam, held(splines[exam], 1.0 - top))]
 
 
-def read(rows, splines, means=None):
+def read(rows, splines, means=None, cohort=None):
     """Turn every readable threshold into an ability, through its own curve."""
     means = high_school.atoms() if means is None else means
+    if cohort is None:
+        cohort = tiling.assessment_size(pool_fit.YEAR)
+    swept = star_sweep(rows, means, cohort)
     return [(row, exam, level, float(row["seats"]))
-            for row in rows for exam, level in levels(row, splines, means)]
+            for row in rows for exam, level in levels(row, splines, swept)]
 
 
 def collect(scored, columns):
