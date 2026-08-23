@@ -141,6 +141,32 @@ class TestStarFuzz(unittest.TestCase):
                 ability.qualifying_ability(rank, high, means, SPREAD) + 1e-9,
                 ability.qualifying_ability(rank, low, means, SPREAD))
 
+    def test_the_margin_sits_under_the_mean_of_the_same_group(self):
+        # The alternative reading takes the bottom of the eligible group, so it
+        # can only fall below the average of everyone standing in it.
+        rng = np.random.default_rng(14)
+        for _ in range(200):
+            means, rank = self.schools(rng), rng.uniform(0.02, 0.9)
+            gate = rng.normal(0, 1)
+            wanted, cohort = rng.integers(5, 400), 200_000
+            margin = ability.marginal_ability(rank, gate, means, SPREAD,
+                                              wanted, cohort)
+            mean = ability.qualifying_ability(rank, gate, means, SPREAD)
+            self.assertLessEqual(margin, mean + 1e-9)
+
+    def test_a_bigger_intake_reaches_higher(self):
+        # Wanting more people can only push the margin up, because the group is
+        # filled from the bottom of what qualifies.
+        rng = np.random.default_rng(15)
+        for _ in range(200):
+            means, rank = self.schools(rng), rng.uniform(0.02, 0.9)
+            small, big = sorted(rng.integers(5, 4000, size=2))
+            few = ability.marginal_ability(rank, None, means, SPREAD,
+                                           small, 200_000)
+            many = ability.marginal_ability(rank, None, means, SPREAD,
+                                            big, 200_000)
+            self.assertGreaterEqual(many + 1e-9, few)
+
     def test_the_reading_never_sits_below_the_weakest_school(self):
         rng = np.random.default_rng(13)
         for _ in range(200):

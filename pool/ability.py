@@ -93,6 +93,36 @@ def qualifying_ability(rank, gate, means, spread):
     return float((means * left + spread * norm.pdf(floor)).sum() / left.sum())
 
 
+def marginal_ability(rank, gate, means, spread, wanted, cohort):
+    """Ability of the weakest of the `wanted` students a department could take.
+
+    The alternative to sweeping: read each department alone, at the bottom of
+    its own eligible group, the way every other path is read at its margin. It
+    suits a department whose bars barely reach the people it needs, and it
+    understates one whose pool dwarfs its intake, because the weakest few of a
+    large group sit wherever the bars fall.
+    """
+    means, floor = eligible_floors(rank, gate, means, spread)
+    share = wanted / cohort if cohort else 0.0
+    if share <= 0 or norm.sf(floor).mean() <= share:
+        return qualifying_ability(rank, gate, means, spread)
+
+    def below(level):
+        """Share of the cohort that qualifies and sits under `level`."""
+        reached = (level - means) / spread
+        return float(np.maximum(0.0, norm.cdf(reached) - norm.cdf(floor)).mean())
+
+    low = float(np.min(means + spread * floor))
+    high = float(np.max(means) + 8.0 * spread)
+    for _ in range(80):
+        middle = 0.5 * (low + high)
+        if below(middle) < share:
+            low = middle
+        else:
+            high = middle
+    return 0.5 * (low + high)
+
+
 GRID = 600
 REACH = 4.5
 

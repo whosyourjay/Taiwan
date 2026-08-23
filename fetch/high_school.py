@@ -26,6 +26,14 @@ SIZES = {
     "filename": "moe-high-school-base.csv",
     "url": "https://stats.moe.gov.tw/files/opendata/base0.csv",
 }
+# 繁星 admits per high school, gathered from school 榜單 and news reports and
+# openly still filling in, so a school's absence means nobody has filed it
+# rather than that it placed nobody.
+STAR_COUNTS = {
+    "dir": "high-school",
+    "filename": "star-school-counts-114.html",
+    "url": "https://shirley.tw/114y-star-plan/",
+}
 
 
 def download(source, default_dir):
@@ -42,7 +50,7 @@ def download(source, default_dir):
 
 
 def main():
-    for source in list(SOURCES.values()) + [SIZES]:
+    for source in list(SOURCES.values()) + [SIZES, STAR_COUNTS]:
         download(source, "high-school")
 
 
