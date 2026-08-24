@@ -56,6 +56,8 @@ class TestRead(unittest.TestCase):
 SCHOOLS = [-0.6, -0.2, 0.0, 0.4, 1.1, 1.9]
 SPREAD = 0.75
 COHORT = 200_000
+# The school means in these tests are already on the exam-sitting scale.
+SITTING = 1.0
 
 
 class TestStar(unittest.TestCase):
@@ -66,7 +68,8 @@ class TestStar(unittest.TestCase):
 
     def level(self, gpa, tops, schools=None):
         scored = ability.read([self.star(gpa, tops)], STRAIGHT,
-                              SCHOOLS if schools is None else schools, COHORT)
+                              SCHOOLS if schools is None else schools, COHORT,
+                              SITTING)
         return scored[0][2]
 
     def test_one_school_averages_its_own_top_slice(self):
@@ -97,7 +100,7 @@ class TestStar(unittest.TestCase):
     def test_繁星_scores_apart_from_the_學測_paths(self):
         scored = ability.read([self.star(5.0, [], seats=100),
                                row("apply", 100, cohort_top=0.5)],
-                              STRAIGHT, SCHOOLS, COHORT)
+                              STRAIGHT, SCHOOLS, COHORT, SITTING)
         got = ability.table(scored, ("school", "dept"),
                             ("gsat", ability.STAR))[0]
         self.assertAlmostEqual(got["gsat"], 50.0)
@@ -110,7 +113,7 @@ class TestStar(unittest.TestCase):
         eighth = self.star(2.0, [], seats=20)
         eighth["path"] = "star_eight"
         got = ability.table(ability.read([ordinary, eighth], STRAIGHT,
-                                         SCHOOLS, COHORT),
+                                         SCHOOLS, COHORT, SITTING),
                             ("school", "dept"),
                             (ability.STAR, ability.STAR_EIGHT))[0]
         self.assertGreater(got[ability.STAR_EIGHT], got[ability.STAR])
@@ -129,7 +132,8 @@ class TestStarBugs(unittest.TestCase):
 
     def level(self, gpa, tops, schools=None):
         scored = ability.read([self.star(gpa, tops)], STRAIGHT,
-                              SCHOOLS if schools is None else schools, COHORT)
+                              SCHOOLS if schools is None else schools, COHORT,
+                              SITTING)
         return scored[0][2] if scored else None
 
     def test_a_wall_of_gates_is_rarer_than_its_strictest_bar(self):
@@ -156,7 +160,8 @@ class TestStarBugs(unittest.TestCase):
         alone = self.level(20.0, [])
         strict = self.star(1.0, [], seats=4000)
         loose = self.star(20.0, [], seats=20, dept="乙系")
-        scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT)
+        scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT,
+                              SITTING)
         after = [got for r, _, got, _ in scored if r["dept"] == "乙系"][0]
         self.assertLess(after, alone)
 
@@ -166,7 +171,8 @@ class TestStarBugs(unittest.TestCase):
             strict["path"] = "star_eight"
             strict["screened"] = screen
             loose = self.star(20.0, [], seats=20, dept="乙系")
-            scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT)
+            scored = ability.read([strict, loose], STRAIGHT, SCHOOLS, COHORT,
+                                  SITTING)
             return [got for r, _, got, _ in scored if r["dept"] == "乙系"][0]
         self.assertLess(trailing(8000), trailing(200))
 

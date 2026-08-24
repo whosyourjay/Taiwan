@@ -87,6 +87,12 @@ def cutoff_levels():
     return sorted(out, key=lambda row: -row["cutoff_z"]), skipped
 
 
+def cap_takers():
+    """Everyone who sat 會考, the cohort a cutoff's share is measured against."""
+    return sum(float(row["students"])
+               for row in tsvio.read_rows(data_path(CATEGORIES)))
+
+
 def cohorts(year=ATOM_YEAR):
     """Graduating cohort per school name, for the year the atoms come from."""
     out = {}

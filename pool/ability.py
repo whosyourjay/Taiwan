@@ -156,6 +156,23 @@ def paired(atoms):
             for item in atoms]
 
 
+def on_pool_scale(atoms, sitting):
+    """Move school means from the 會考 cohort onto the pool that sits 學測.
+
+    A cutoff counts everyone who sat 會考, while a 學測 gate counts only those
+    who reached the exam three years later. Comparing the two without saying so
+    puts every school lower than it belongs, which is why the reading needed a
+    curve afterwards to look right.
+    """
+    if not sitting or sitting >= 1.0:
+        return atoms
+    out = []
+    for mean, size in atoms:
+        share = float(np.clip(norm.sf(mean) / sitting, 1e-9, 1.0))
+        out.append((float(norm.isf(share)), size))
+    return out
+
+
 def pool_grid(atoms, spread):
     """Ability grid and the weight each school starts with on it."""
     level = np.linspace(-REACH, REACH, GRID)
@@ -199,14 +216,14 @@ def draw(weight, level, cuts, passing, wanted):
     return found, weight - live * (1.0 - left)
 
 
-def star_sweep(rows, atoms, cohort, spread=high_school.SPREAD):
+def star_sweep(rows, atoms, cohort, sitting=None, spread=high_school.SPREAD):
     """Read every 繁星 department, strictest first, thinning the pool as it goes.
 
     Ordering by what each department's own bars reach keeps the published
     ranking out of the score, and sweeping in that order lets a department
     already served leave a shallower pool to the ones behind it.
     """
-    atoms = paired(atoms)
+    atoms = on_pool_scale(paired(atoms), sitting)
     level, start = pool_grid(atoms, spread)
     means = np.array([mean for mean, _ in atoms], dtype=float)
     ready = []
@@ -233,14 +250,14 @@ def star_sweep(rows, atoms, cohort, spread=high_school.SPREAD):
 
 
 def star_level(row, splines, swept):
-    """繁星's reading, priced by the same curve as every other threshold."""
+    """繁星's reading, already an ability and so needing no curve of its own.
+
+    Every other path reads a share of one exam's takers and needs a curve to
+    price it. This one has been worked out on the ability scale from the start,
+    so pricing it again would put it through a conversion it has already had.
+    """
     level = swept.get(id(row))
-    if level is None:
-        return None
-    below = float(norm.cdf(level))
-    if "gsat" not in splines:
-        return below
-    return held(splines["gsat"], below)
+    return None if level is None else float(np.clip(norm.cdf(level), 0.0, 1.0))
 
 
 def levels(row, splines, swept):
@@ -255,12 +272,14 @@ def levels(row, splines, swept):
     return [] if top is None else [(exam, held(splines[exam], 1.0 - top))]
 
 
-def read(rows, splines, means=None, cohort=None):
+def read(rows, splines, means=None, cohort=None, sitting=None):
     """Turn every readable threshold into an ability, through its own curve."""
     means = high_school.atoms() if means is None else means
     if cohort is None:
         cohort = tiling.assessment_size(pool_fit.YEAR)
-    swept = star_sweep(rows, means, cohort)
+    if sitting is None:
+        sitting = cohort / high_school.cap_takers()
+    swept = star_sweep(rows, means, cohort, sitting)
     return [(row, exam, level, float(row["seats"]))
             for row in rows for exam, level in levels(row, splines, swept)]
 
