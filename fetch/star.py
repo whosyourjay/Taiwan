@@ -5,11 +5,11 @@ CAC splits the tables in two: 第一類學群至第七類學群 (one2seven) and
 admits 醫學系 that way, so a 404 there is normal.
 
 Codes come from the per-year college list page, so a school absent that year is
-skipped rather than downloaded blind.
+skipped rather than downloaded blind. The list pages, PDFs, and a completion
+marker all stay local; a completed year makes no network requests on a warm run.
 """
 
 import argparse
-import glob
 import os
 import re
 import sys
@@ -23,18 +23,7 @@ OUT = source_path("star")
 BASE = "https://www.cac.edu.tw/cacportal/star_his_report"
 GROUPS = ("one2seven", "eight")
 
-# The schools to fetch, or empty for every school the year lists. 陽明 and 交通
-# merged into 陽明交通 for 111 admissions, so no year lists all three.
-WANT = (
-    "國立臺灣大學",
-    "國立陽明交通大學",
-    "國立政治大學",
-    "國立陽明大學",
-    "國立清華大學",
-    "臺北醫學大學",
-    "國立臺北大學",
-    "國立交通大學",
-)
+WANT = ()
 
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 Chrome/126 Safari/537.36"}
@@ -53,7 +42,15 @@ def get(url):
 
 def colleges(year, group):
     """{code: name} for one year and 學群 split, or {} if the page is missing."""
-    page = get(f"{BASE}/{year}/{year}_result_standard/{group}/collegeList_1.php")
+    cached_page = os.path.join(OUT, f"{year}-{group}-colleges.html")
+    if os.path.exists(cached_page):
+        with open(cached_page, "rb") as handle:
+            page = handle.read()
+    else:
+        page = get(f"{BASE}/{year}/{year}_result_standard/{group}/collegeList_1.php")
+        if page:
+            with open(cached_page, "wb") as handle:
+                handle.write(page)
     if page is None:
         return {}
     return dict(COLLEGE.findall(page.decode("utf-8", "replace")))
@@ -61,18 +58,25 @@ def colleges(year, group):
 
 def fetch(year, group, code):
     """Save one college's PDF; returns bytes written, or 0 if absent."""
+    path = os.path.join(OUT, f"{year}-{code}-{group}.pdf")
+    if os.path.exists(path):
+        return 0
     url = f"{BASE}/{year}/{year}_result_standard/{group}/{code}/{year}Standard_{code}.pdf"
     body = get(url)
     if not body:
-        return 0
-    path = os.path.join(OUT, f"{year}-{code}-{group}.pdf")
+        return None
     with open(path, "wb") as f:
         f.write(body)
     return len(body)
 
 
 def cached(year):
-    return bool(glob.glob(os.path.join(OUT, f"{year}-*.pdf")))
+    return os.path.exists(os.path.join(OUT, f"{year}.complete"))
+
+
+def mark_complete(year):
+    with open(os.path.join(OUT, f"{year}.complete"), "w", encoding="ascii") as handle:
+        handle.write("all colleges listed by CAC downloaded\n")
 
 
 def main(years, refresh=False):
@@ -82,15 +86,21 @@ def main(years, refresh=False):
         if cached(year) and not refresh:
             print(f"{year} cached; pass --refresh to check CAC", file=sys.stderr)
             continue
+        complete = True
         for group in GROUPS:
             listed = colleges(year, group)
+            complete &= bool(listed) or group == "eight"
             for code, name in sorted(listed.items()):
                 if WANT and name.strip() not in WANT:
                     continue
                 n = fetch(year, group, code)
-                total += n
-                print(f"{year} {group:9} ({code}) {name.strip()}  {n:>7} bytes",
+                complete &= n is not None
+                total += n or 0
+                size = "absent" if n is None else f"{n:>7} bytes"
+                print(f"{year} {group:9} ({code}) {name.strip()}  {size}",
                       file=sys.stderr)
+        if complete and not WANT:
+            mark_complete(year)
     print(f"{total} bytes in {time.time() - t0:.1f}s -> star/", file=sys.stderr)
 
 

@@ -14,6 +14,7 @@ sources/
 # Built by modules under viz/ and by pool.plot.
 figures/
 *.png
+/rankings/ability-report.html
 
 __pycache__/
 *.pyc

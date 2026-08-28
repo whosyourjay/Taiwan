@@ -286,7 +286,9 @@ def coverage_gaps(rows, totals):
     observed = collections.Counter()
     for row in rows:
         observed[(row["year"], row["path"])] += row["seats"]
-    uncovered = set(observed) - set(totals)
+    audited_years = {year for year, _ in totals}
+    uncovered = {key for key in set(observed) - set(totals)
+                 if key[0] in audited_years}
     if uncovered:
         raise ValueError(f"missing official admission totals for {sorted(uncovered)}")
 

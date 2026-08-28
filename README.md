@@ -15,8 +15,8 @@ of the academic-track students also took 分科測驗.
 | Path | How it works | Seats | Our coverage |
 | --- | --- | ---: | --- |
 | 一般大學 分發入學 | 指考 + ranked preferences | 32,497 | Full, 107–114 |
-| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 | 110: 68 schools; 111: 6 |
-| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 | 110: 67 schools; 111: 6 |
+| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 | Full, 108–114 |
+| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 | Top decile, 108–114; full 110 |
 | 一般大學 其他管道 | Special selection and school-run admissions | 5,087 | Not handled |
 | 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 | Full general intake, 107–115 |
 | 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 | Count only; not scored |
@@ -25,8 +25,8 @@ of the academic-track students also took 分科測驗.
 | 四技二專 特殊選才 | Skills, experience, or talent | 512 | Not handled |
 | 科技校院 繁星推薦 | School recommendation + rank | 1,976 | Not handled |
 
-The two final-cutoff routes contain 48,394 named admissions in 114. The partial
-繁星 and 個申 samples add rank evidence only where a row passes validation and
+The two final-cutoff routes contain 48,394 named admissions in 114. 繁星 and the
+top-decile 個申 panel add rank evidence only where a row passes validation and
 matches a 分發 department. `data/admission-totals.tsv` audits missing coverage; those
 counts do not affect `score` yet.
 
@@ -47,6 +47,8 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
   with predecessor names in `former_schools`
 - `rankings/ability-{departments,groups}.tsv` — the same ability scale below
   school level, retaining each source year's school name
+- `rankings/ability-report.html` — a self-contained dark visual report with
+  interactive seat, exam, route, program, high-school, and coverage figures
 - `figures/` — every generated figure, built by `python3 -m viz`
 - `data/high-school-destinations.tsv` — 110 北一女 graduate destinations
 - `data/high-school-entry-cutoffs.tsv` — high-school entry cutoffs by district
@@ -327,8 +329,8 @@ partial means we collected only named schools or districts.
 | --- | --- | --- | --- |
 | Ranking | UAC 分發入學 final cutoffs | 107–114 | Full; 1,720–1,885 admitted 系組 per year |
 | Ranking | JCTV 四技二專聯合登記分發 final cutoffs | 107–115 | Full general intake; 2,013–2,713 admitted 系科組 per year |
-| Ranking | CAC 繁星推薦 standards | 110; 111 | Partial: 68 schools / 3,015 rows; 6 schools / 294 rows |
-| Ranking | CAC 個人申請 first-stage screens | 110; 111 | Partial: 67 schools / 2,004 rows; 6 schools / 276 rows |
+| Ranking | CAC 繁星推薦 standards | 108–114 | Full; 2,916–3,045 program rows per year |
+| Ranking | CAC 個人申請 first-stage screens | 108–114 | Top seven current universities longitudinally; full 110 |
 | Ranking and pool | CEEC 學測 native distributions | 95–115 | Five-subject totals through 107; subject or exact combination tables from 107 |
 | Ranking and pool | CEEC 指考 / 分科 distributions | 107–115 | Raw-score subjects in 107–110; 60-level subjects in 111–115 |
 | Ranking | CEEC 學測使用於分發入學 distributions | 111–115 | Full published subject tables |
@@ -362,15 +364,16 @@ split into 第一類至第七類學群 and 第八類學群 (medicine):
 
     https://www.cac.edu.tw/cacportal/star_his_report/{year}/{year}_result_standard/{one2seven,eight}/{code}/{year}Standard_{code}.pdf
 
-Text PDFs in fixed columns. Downloaded for 68 named schools in 110 and six in
-111, into `sources/star/` -> `data/star-cutoffs.tsv`. See Method.
+Text PDFs in fixed columns. All listed schools for 108–114 are cached in
+`sources/star/` and parsed into `data/star-cutoffs.tsv`. See Method.
 
 一般大學, 個人申請 (學測). 第一階段篩選標準一覽表:
 
     https://www.cac.edu.tw/cacportal/apply_his_report/{year}/{year}_sieve_standard/report/pict/{code}.png
 
-One PNG per school, downloaded for the same schools and years into `sources/apply/`
-and OCR'd into `data/apply-cutoffs.tsv`. See Method.
+One PNG per school, with every 108–114 source cached in `sources/apply/`. The
+score-critical columns are OCR'd for the stable top decile across all seven years;
+110 retains the full field. See `docs/apply-ocr.md`.
 
 技專校院入學測驗中心, 統測 成績人數累計表 (open data 報表B2). One PDF a year,
 saved by hand as `sources/tech/tcte-{year}-scores.pdf` for 108-114.
@@ -442,10 +445,10 @@ Run commands from the repository root. Install Python packages with
 
     python3 -m parse.uac       # sources/uac/*-cutoffs.pdf -> data/uac-cutoffs.tsv
     python3 -m parse.tech      # sources/tech/union42-*.pdf -> data/tech-cutoffs.tsv
-    python3 -m fetch.star 110 111
+    python3 -m fetch.star 108 109 110 111 112 113 114
     python3 -m parse.star      # sources/star/*.pdf -> data/star-cutoffs.tsv
-    python3 -m fetch.apply 110 111
-    python3 -m parse.apply     # sources/apply/*.png -> data/apply-cutoffs.tsv
+    python3 -m fetch.apply 108 109 110 111 112 113 114
+    python3 -m parse.apply --top-decile  # bounded, checkpointed OCR panel
     python3 -m fetch.ceec      # optional; refresh sources/ceec/
     python3 -m parse.ceec      # sources/ceec/*.xls -> data/ceec-scores.tsv
     python3 -m parse.tcte      # sources/tech/tcte-*-scores.pdf -> data/tongce-scores.tsv
@@ -468,11 +471,11 @@ Run commands from the repository root. Install Python packages with
     python3 -m pool.factor     # loadings from the 繁星 rank-and-gate bars, ~2min
     python3 -m pool.diagnose   # the same fit, department by department, ~2min
     python3 -m viz             # every figure -> figures/
+    python3 -m pages.report    # interactive report -> rankings/ability-report.html
     python3 -m unittest
 
-Both CAC fetchers take the schools named in their `WANT` list, or every school
-the year lists when that list is empty. `sources/star/` and `sources/apply/` hold
-the whole-year download; the eight names in `fetch/star.py` cut it to a few seconds.
+Both CAC fetchers cache the official annual index, every listed source, and a
+completion marker. `sources/star/` and `sources/apply/` hold the whole-year downloads.
 
 Fetch commands trust saved sources and manifests, so a warm run makes no network
 requests. Discovery-based fetchers accept `--refresh` for an intentional upstream

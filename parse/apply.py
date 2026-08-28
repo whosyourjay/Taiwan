@@ -17,6 +17,7 @@ a digits-only alphabet is both far faster and more accurate than a pass per cell
 or per row, because nothing in the image can be read as the wrong kind of thing.
 """
 
+import argparse
 import csv
 import difflib
 import glob
@@ -50,7 +51,7 @@ BAND_CHARS = "頂前均後底標"
 DIGITS = "0123456789"
 
 SCALE = 4
-CHUNK = 25      # cells per OCR pass; a whole column makes an unwieldy page
+CHUNK = 25
 MARGIN = 20     # white border trim() leaves around the ink
 MIN_INK = 6     # original px; `--` is about 3 tall, any character at least 12
 
@@ -79,6 +80,15 @@ SUBJECT_CHAR = re.compile(r"[國英數社自]")
 # 招生名額 is places offered. CAC's own totals give what share was taken:
 # 獲分發人數 over 招生名額總數, from {year}_member_statistics.php.
 FILL = {"110": 49279 / 55541, "111": 45518 / 55810}
+STAT_NUMBER = r".*?<font\s+color\s*=\s*red[^>]*>([\d,]+)</font>"
+
+# Fixed on 2026-08-29: the top seven of 68 general universities in the combined
+# ranking. Historical names keep 陽明交通 in the same longitudinal selection.
+TOP_DECILE = {
+    "國立臺灣大學", "國立政治大學", "國立陽明交通大學", "國立陽明大學",
+    "國立交通大學", "國立清華大學", "國立成功大學", "國立臺北大學",
+    "國立中央大學",
+}
 
 
 def tess(img, whitelist=None, psm="6", tsv=False):
@@ -195,6 +205,11 @@ def read_column(im, rows, j, whitelist):
     return out
 
 
+def read_columns(im, rows, indexes, whitelist):
+    """Read only selected columns, isolating each to retain trusted accuracy."""
+    return {j: read_column(im, rows, j, whitelist) for j in indexes}
+
+
 def band_of(text):
     for b in BANDS:
         if b[0] in text:
@@ -234,7 +249,7 @@ def measure(orders):
             "norm": round(level / (MAX_LEVEL * n), 4), "n_orders": len(fired)}
 
 
-def parse(path, colleges, names):
+def parse(path, colleges, names, code_names=None, fills=None):
     year, code = os.path.basename(path)[:-4].split("-")
     im = Image.open(path).convert("L")
     grid_rows = grid(np.array(im) < 128)
@@ -244,33 +259,40 @@ def parse(path, colleges, names):
     r0 = GATE_0 + len(gate_names)
     o0 = r0 + len(ratio_names)
     rows = [row for row in grid_rows if len(row[2]) - 1 == n_cells]
-    cols = {j: read_column(im, rows, j, wl)
-            for j, wl in alphabet(gate_names, ratio_names).items()}
+    order_indexes = list(range(o0, o0 + N_ORDERS))
+    cols = read_columns(im, rows, (0, 3), DIGITS)
+    cols.update(read_columns(
+        im, rows, order_indexes, SUBJECT_CHARS + DIGITS + ".()+"
+    ))
     college = colleges.get((year, code), "")
+    code_names = code_names or {}
+    fills = FILL if fills is None else fills
+    codes = [number(value) for value in cols[0]]
+    missing = [i for i, dept_code in enumerate(codes)
+               if len(dept_code) >= 5
+               and (year, code, dept_code[:5]) not in code_names]
+    read_names = read_column(im, [rows[i] for i in missing], 2, None)
+    ocr_names = dict(zip(missing, read_names))
     out, skipped = [], 0
     for i in range(len(rows)):
         cs = [cols[j][i] if j in cols else "" for j in range(n_cells)]
-        dept_code = number(cs[0])
+        dept_code = codes[i]
         if len(dept_code) < 5:
             skipped += 1
             continue
-        gates = [band_of(c) for c in cs[GATE_0:r0]]
-        ratios = [number(c) for c in cs[r0:o0]]
         orders = [order_cell(c) for c in cs[o0:o0 + N_ORDERS]]
         seats = number(cs[3])
-        used = [float(r) for r in ratios if r]
+        ocr_name = ocr_names.get(i, "")
+        dept = code_names.get((year, code, dept_code[:5]), "")
         out.append({
             "year": year, "college_code": code, "college": college,
             "dept_code": dept_code,
-            "dept": snap(cs[2], names.get(college, ())),
-            "dept_ocr": cs[2],
-            "sex": cs[1],
+            "dept": dept or snap(ocr_name, names.get(college, ())),
+            "dept_ocr": ocr_name,
+            "sex": "",
             "seats": seats,
-            "admitted": round(int(seats) * FILL[year]) if seats and year in FILL else "",
-            "ratio": min(used) if used else "",
-            "gates": " ".join(f"{s}{g}" for s, g in zip(gate_names, gates)
-                              if g and s != "空"),
-            "ratios": " ".join(f"{s}{r}" for s, r in zip(ratio_names, ratios) if r),
+            "admitted": round(int(seats) * fills[year]) if seats and year in fills else "",
+            "ratio": "", "gates": "", "ratios": "",
             "order_1": f"{orders[0][0]}{orders[0][1]:g}" if orders[0][2] else "",
             **measure(orders),
         })
@@ -305,6 +327,21 @@ def load_colleges():
                 for r in csv.DictReader(f, delimiter="\t")}
 
 
+def fill_rates():
+    """Annual CAC placement/quota ratios from cached official statistics."""
+    out = dict(FILL)
+    for source in glob.glob(source_path("apply", "*-statistics.html")):
+        year = os.path.basename(source).split("-", 1)[0]
+        with open(source, encoding="utf-8") as handle:
+            text = handle.read()
+        quota = re.search(r"招生名額總數：" + STAT_NUMBER, text)
+        placed = re.search(r"獲分發人數\(招生名額\)：" + STAT_NUMBER, text)
+        if quota and placed:
+            denominator = int(quota.group(1).replace(",", ""))
+            out[year] = int(placed.group(1).replace(",", "")) / denominator
+    return out
+
+
 def load_names():
     """{school: {department names}} from the sources that ship as text."""
     out = {}
@@ -317,6 +354,15 @@ def load_names():
                 out.setdefault(r["college" if "college" in r else "school"],
                                set()).add(r[col])
     return out
+
+
+def load_code_names():
+    """Stable CAC program prefixes mapped to names from the text 繁星 source."""
+    source = data_path("star-cutoffs.tsv")
+    if not os.path.exists(source):
+        return {}
+    return {(row["year"], row["college_code"], row["dept_code"]): row["dept"]
+            for row in tsvio.read_rows(source)}
 
 
 def name_cells(source):
@@ -381,19 +427,102 @@ def refresh_names_from_images(out_path, years=()):
     )
 
 
-def main(out_path):
-    colleges, names, rows = load_colleges(), load_names(), []
-    for png in sorted(glob.glob(source_path("apply", "*.png"))):
-        got, skipped = parse(png, colleges, names)
-        print(f"{os.path.basename(png)}: {len(got)} 校系, {skipped} non-data rows",
-              file=sys.stderr)
-        rows.extend(got)
-    written = tsvio.write_rows(out_path, rows)
-    print(f"wrote {written} rows to {out_path}", file=sys.stderr)
+def source_key(source):
+    return tuple(os.path.basename(source)[:-4].split("-"))
+
+
+def sources(colleges, top_decile=False, years=()):
+    """Selected source images, with historical school names resolved locally."""
+    wanted_years = set(years)
+    out = []
+    for source in sorted(glob.glob(source_path("apply", "*.png"))):
+        year, code = source_key(source)
+        if wanted_years and year not in wanted_years:
+            continue
+        if top_decile and colleges.get((year, code)) not in TOP_DECILE:
+            continue
+        out.append(source)
+    return out
+
+
+def replace_source(rows, key, replacement):
+    kept = [row for row in rows if (row["year"], row["college_code"]) != key]
+    return sorted(kept + replacement,
+                  key=lambda row: (row["year"], row["college_code"], row["dept_code"]))
+
+
+def audit_rows(trusted, found):
+    """Critical-field agreement with the existing slow-parser corpus."""
+    fields = ("seats", "cut_label", "cut_level", "cut_n", "norm")
+    old = {row["dept_code"]: row for row in trusted}
+    new = {row["dept_code"]: row for row in found}
+    common = old.keys() & new.keys()
+    agreement = {
+        field: sum(str(old[key][field]) == str(new[key][field]) for key in common)
+        / max(len(common), 1)
+        for field in fields
+    }
+    return len(old), len(new), len(common), agreement
+
+
+def audit_sources(selected, existing, colleges, names, code_names, fills):
+    totals = {field: [0, 0] for field in ("seats", "cut_label", "cut_level", "cut_n", "norm")}
+    for source in selected:
+        key = source_key(source)
+        trusted = [row for row in existing
+                   if (row["year"], row["college_code"]) == key]
+        if not trusted:
+            raise RuntimeError(f"no trusted rows for audit: {os.path.basename(source)}")
+        found, _ = parse(source, colleges, names, code_names, fills)
+        old_n, new_n, common_n, agreement = audit_rows(trusted, found)
+        print(f"audit {os.path.basename(source)}: {old_n}/{new_n} rows, "
+              + ", ".join(f"{field}={100 * value:.1f}%"
+                          for field, value in agreement.items()), file=sys.stderr)
+        for field, value in agreement.items():
+            totals[field][0] += round(value * common_n)
+            totals[field][1] += common_n
+        if common_n != old_n or new_n != old_n or min(agreement.values()) < 0.99:
+            raise RuntimeError(f"accuracy gate failed for {os.path.basename(source)}")
+    print("accuracy gate passed: " + ", ".join(
+        f"{field}={100 * hits / count:.1f}%" for field, (hits, count) in totals.items()
+    ), file=sys.stderr)
+
+
+def main(out_path, selected, refresh=False, audit=False):
+    colleges, names, code_names, fills = (
+        load_colleges(), load_names(), load_code_names(), fill_rates()
+    )
+    rows = list(tsvio.read_rows(out_path)) if os.path.exists(out_path) else []
+    if audit:
+        audit_sources(selected, rows, colleges, names, code_names, fills)
+        return
+    parsed = {(row["year"], row["college_code"]) for row in rows}
+    for index, source in enumerate(selected, 1):
+        key = source_key(source)
+        if key in parsed and not refresh:
+            print(f"{os.path.basename(source)} cached ({index}/{len(selected)})",
+                  file=sys.stderr)
+            continue
+        got, skipped = parse(source, colleges, names, code_names, fills)
+        rows = replace_source(rows, key, got)
+        tsvio.write_rows(out_path, rows)
+        print(f"{os.path.basename(source)}: {len(got)} rows, {skipped} skipped "
+              f"({index}/{len(selected)}; checkpointed)", file=sys.stderr)
+    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--names-only"]:
-        refresh_names_from_images(data_path("apply-cutoffs.tsv"), sys.argv[2:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("years", nargs="*")
+    parser.add_argument("--top-decile", action="store_true")
+    parser.add_argument("--audit", action="store_true")
+    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--names-only", action="store_true")
+    args = parser.parse_args()
+    target = data_path("apply-cutoffs.tsv")
+    if args.names_only:
+        refresh_names_from_images(target, args.years)
     else:
-        main(data_path("apply-cutoffs.tsv"))
+        college_names = load_colleges()
+        chosen = sources(college_names, args.top_decile, args.years)
+        main(target, chosen, args.refresh or not args.top_decile, args.audit)

@@ -25,7 +25,7 @@ class TestWarmFetches(unittest.TestCase):
     def test_star_skips_a_cached_year(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
-            (target / "110-001-one2seven.pdf").write_bytes(b"source")
+            (target / "110.complete").write_text("complete\n")
             with mock.patch.object(star, "OUT", str(target)), \
                     mock.patch.object(star, "colleges",
                                       side_effect=AssertionError("network discovery")):
@@ -34,11 +34,14 @@ class TestWarmFetches(unittest.TestCase):
     def test_apply_skips_a_cached_year_and_preserves_its_name_table(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
-            (target / "110-001.png").write_bytes(b"source")
+            (target / "110.complete").write_text("complete\n")
+            (target / "110-statistics.html").write_text("cached statistics\n")
             names = target / "colleges.tsv"
             names.write_text("year\tcollege_code\tcollege\n110\t001\t甲大學\n",
                              encoding="utf-8")
             with mock.patch.object(apply, "OUT", str(target)), \
+                    mock.patch.object(apply, "get",
+                                      side_effect=AssertionError("network fetch")), \
                     mock.patch.object(apply, "colleges",
                                       side_effect=AssertionError("network discovery")):
                 apply.main(["110"])

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taiwan's university admission landscape</title>
+<style>__CSS__</style>
+</head>
+<body>
+<div class="shell">
+<nav>
+  <h1>Taiwan admissions</h1>
+  <p class="sub">Seats, thresholds, routes, and one graduating class.</p>
+  <ol>
+    <li><a href="#ladder" class="on">The national seat ladder</a></li>
+    <li><a href="#bridge">One percentile, five pools</a></li>
+    <li><a href="#routes">Universities by route</a></li>
+    <li><a href="#programs">Programs inside a school</a></li>
+    <li><a href="#beiyi">Where 北一女 graduates went</a></li>
+    <li><a href="#coverage">What the sources cover</a></li>
+  </ol>
+  <button id="theme" type="button">Use light theme</button>
+</nav>
+
+<main>
+<section class="fig" id="ladder">
+  <header>
+    <p class="eyebrow">Ability pool · 110學年度</p>
+    <h2>The system starts near the bottom fifth of the cohort—and fills every rung after.</h2>
+    <p class="lede">Every department threshold is placed on one age-cohort axis.
+      The top panel counts seats at each ability; the lower curve asks how many
+      measured seats are at least this selective. Technology programs supply much
+      of the lower bridge, while general universities dominate the upper tail.</p>
+  </header>
+  <dl class="stat">
+    <div><dt>Threshold seats</dt><dd id="ladder-seats"></dd></div>
+    <div><dt>Departments</dt><dd id="ladder-departments"></dd></div>
+    <div><dt>First occupied rung</dt><dd id="ladder-floor"></dd></div>
+    <div><dt>Assessment pool</dt><dd id="ladder-pool"></dd></div>
+  </dl>
+  <div class="plot"><svg id="ladder-svg" aria-label="Seat density and cumulative seat ladder"></svg><div class="readout" id="ladder-tip"></div></div>
+  <div class="legend" id="ladder-legend"></div>
+  <p class="caption">Seats are threshold weights, so a department observed on
+    several exams contributes to each reading. The empty lower stretch means no
+    readable admission bar reaches it; it does not mean nobody there attends college.</p>
+</section>
+
+<section class="fig" id="bridge">
+  <header>
+    <p class="eyebrow">Exam populations</p>
+    <h2>The 50th percentile is not the same student on every exam.</h2>
+    <p class="lede">Each density shows where one exam's candidates sit on the
+      shared ability axis, with every curve normalized to the same area. 分科測驗
+      is selected from students who already sat 學測; the three 統測 pools draw
+      different vocational tracks. A raw percentile can therefore move tens of
+      points when carried across exams.</p>
+  </header>
+  <div class="plot"><svg id="bridge-svg" aria-label="Candidate ability density within each exam"></svg><div class="readout" id="bridge-tip"></div></div>
+  <div class="legend" id="bridge-legend"></div>
+  <h3 class="subhead">The same ability, quoted inside each exam</h3>
+  <div class="tablewrap crosswalk"><table id="crosswalk"><thead></thead><tbody></tbody></table></div>
+  <p class="caption">Rows begin at the familiar 學測 五標. Every other cell is the
+    percentile that reaches the same point on the shared ability axis.</p>
+</section>
+
+<section class="fig" id="routes">
+  <header>
+    <p class="eyebrow">Combined routes</p>
+    <h2>Elite institutions are measured repeatedly—and their routes do not quote the same margin.</h2>
+    <p class="lede">Each row is a university. The diamond is its seat-weighted
+      estimate; coloured dots are the separate exam or recommendation readings.
+      A long connector is a real warning about route mix, not uncertainty hidden
+      behind a single league-table rank.</p>
+  </header>
+  <div class="controls">
+    <label>Show <select id="route-limit"><option>15</option><option selected>25</option><option>50</option></select></label>
+    <label>Order <select id="route-order"><option value="ability">by ability</option><option value="spread">by disagreement</option></select></label>
+  </div>
+  <div class="plot scroll"><svg id="route-svg" aria-label="University ability by admission route"></svg><div class="readout" id="route-tip"></div></div>
+  <div class="legend" id="route-legend"></div>
+</section>
+
+<section class="fig" id="programs">
+  <header>
+    <p class="eyebrow">Within-school spread</p>
+    <h2>A university name is not a program score.</h2>
+    <p class="lede">Programs inside one institution can span an entire national
+      tier. The band marks the seat-weighted middle 80%; dots are departments,
+      sized by their measured seats. Medical departments create some of the
+      sharpest upper tails.</p>
+  </header>
+  <div class="controls"><label>University <select id="program-school"></select></label></div>
+  <dl class="stat">
+    <div><dt>Departments</dt><dd id="program-count"></dd></div>
+    <div><dt>Seats</dt><dd id="program-seats"></dd></div>
+    <div><dt>Median</dt><dd id="program-median"></dd></div>
+    <div><dt>Middle 80% span</dt><dd class="hot" id="program-span"></dd></div>
+  </dl>
+  <div class="plot"><svg id="program-svg" aria-label="Department abilities inside a selected university"></svg><div class="readout" id="program-tip"></div></div>
+  <div class="tablewrap"><table id="program-table"><thead><tr><th>Strongest programs</th><th>Ability</th><th>Seats</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="fig" id="beiyi">
+  <header>
+    <p class="eyebrow">One complete exit cohort · 北一女 110</p>
+    <h2>Half of the named destinations land at 95.25 or above.</h2>
+    <p class="lede">The school reports every destination, but names domestic
+      universities only when at least ten graduates attend. The chart places the
+      675 named domestic destinations on the university ability scale; grouped
+      domestic and overseas rows stay grouped instead of being treated as zero.</p>
+  </header>
+  <dl class="stat">
+    <div><dt>Named domestic</dt><dd id="beiyi-named"></dd></div>
+    <div><dt>Named median</dt><dd id="beiyi-median"></dd></div>
+    <div><dt>At ability 90+</dt><dd id="beiyi-ninety"></dd></div>
+    <div><dt>High-school entry floor</dt><dd id="beiyi-entry"></dd></div>
+  </dl>
+  <div class="plot"><svg id="beiyi-svg" aria-label="Beiyi graduate destinations by university ability"></svg><div class="readout" id="beiyi-tip"></div></div>
+  <div class="destination-stack" id="destination-stack"></div>
+  <p class="caption">The entry floor is the top share of national CAP takers at
+    北一女's 107 cutoff, not its students' mean and not the same axis as university
+    ability. Nine of 793 graduates are absent from the destination total.</p>
+</section>
+
+<section class="fig" id="coverage">
+  <header>
+    <p class="eyebrow">Evidence map · 107–115學年度</p>
+    <h2>Final cutoffs are national. Screened routes are longitudinal at the top.</h2>
+    <p class="lede">繁星 now covers every listed university from 108 through 114;
+      個申 follows a stable top decile across the same years and retains the full
+      110 field. Darker cells cover more of published intake. Years without a
+      national total still show their bars, but do not invent a denominator.</p>
+  </header>
+  <div class="coverage-grid scroll" id="coverage-grid"></div>
+  <p class="caption">Percentages above 100 can occur because route tables and MOE
+    admissions totals count slightly different populations. They are coverage
+    diagnostics, not weights in the final score.</p>
+</section>
+
+<footer>Built entirely from the generated admission, exam-distribution,
+  high-school, and ability tables in this repository. No chart makes a network request.</footer>
+</main>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script id="page-data" type="application/json">__DATA__</script>
+<script>__JS__</script>
+</body>
+</html>

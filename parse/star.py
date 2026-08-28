@@ -13,12 +13,13 @@ The tables are laid out in fixed columns, so words are assigned to a column by
 horizontal position against the header row's anchors.
 """
 
+import csv
 import glob
+import io
 import os
 import re
+import subprocess
 import sys
-
-import pdfplumber
 
 from lib import tsvio
 from lib.paths import data_path, path, source_path
@@ -27,15 +28,38 @@ from lib.paths import data_path, path, source_path
 GATE_SUBJECTS = ("國文", "英文", "數學", "數學A", "數學B", "社會", "自然", "英聽")
 BAND = re.compile(r"^(頂標|前標|均標|後標|底標)$")
 LEVEL = re.compile(r"^(\d+)級分$")
-PERCENT = re.compile(r"^([\d.]+)%$")
+PERCENT = re.compile(r"^([\d.]+)%[＊*]?$")
 DEPT_CODE = re.compile(r"^\d{5}$")
 COLLEGE = re.compile(r"\((\d{3})\)(.+)")
 
 
-def rows_of(page):
+def pages_of(path):
+    """Poppler word boxes grouped by page.
+
+    ``pdftotext`` reads this corpus much faster than constructing pdfminer's
+    full page layout, while retaining the coordinates the fixed-column parser
+    needs.
+    """
+    process = subprocess.run(
+        ["pdftotext", "-tsv", path, "-"], capture_output=True, text=True,
+        check=True,
+    )
+    pages = {}
+    for row in csv.DictReader(io.StringIO(process.stdout), delimiter="\t"):
+        if row["level"] != "5" or not row["text"].strip():
+            continue
+        left, width = float(row["left"]), float(row["width"])
+        pages.setdefault(int(row["page_num"]), []).append({
+            "text": row["text"], "x0": left, "x1": left + width,
+            "top": float(row["top"]),
+        })
+    return [pages[number] for number in sorted(pages)]
+
+
+def rows_of(words):
     """Page words grouped into visual rows, each sorted left to right."""
     buckets = {}
-    for w in page.extract_words():
+    for w in words:
         w["cx"] = (w["x0"] + w["x1"]) / 2
         buckets.setdefault(round(w["top"] / 3), []).append(w)
     return [sorted(buckets[k], key=lambda w: w["cx"]) for k in sorted(buckets)]
@@ -164,6 +188,15 @@ def read(block, ax):
     return out
 
 
+def round_counts(block, ax):
+    """Round counts, which old PDFs sometimes print on the department row."""
+    for row in block:
+        r1, r2 = cell(row, ax[1]), cell(row, ax[3])
+        if r1.isdigit():
+            return ["", r1, "", r2, ""]
+    return ["", "", "", "", ""]
+
+
 def record(block, ax):
     """One 校系 as a dict of columns, or None if the block holds no 校系代碼."""
     h = head(block)
@@ -172,7 +205,7 @@ def record(block, ax):
     items = read(block, ax)
     by = {i[0]: i for i in items}
     gpa = by.get("在校學業", ["", "", "--", "", "--"])
-    counts = next((i for i in items if re.match(r"^\d+$", i[1])), ["", "", "", "", ""])
+    counts = round_counts(block, ax)
     ties = [f"{i[0]}={i[2]}" for i in items[1:] if value(i[2]) is not None]
     g1, g2 = (value(gpa[2]), value(gpa[4]))
     g1, g2 = ("" if g1 is None else g1, "" if g2 is None else g2)
@@ -189,18 +222,17 @@ def record(block, ax):
 def parse(path):
     year, code, group = os.path.basename(path)[:-4].split("-")
     out, college = [], ("", "")
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            rows = rows_of(page)
-            college = college if college[0] else college_of(rows)
-            ax = anchors(rows)
-            if not ax:
-                continue
-            for block in blocks(rows, ax[0]):
-                r = record(block, ax)
-                if r:
-                    out.append({"year": year, "group": group,
-                                "college_code": code, "college": college[1], **r})
+    for words in pages_of(path):
+        rows = rows_of(words)
+        college = college if college[0] else college_of(rows)
+        ax = anchors(rows)
+        if not ax:
+            continue
+        for block in blocks(rows, ax[0]):
+            r = record(block, ax)
+            if r:
+                out.append({"year": year, "group": group,
+                            "college_code": code, "college": college[1], **r})
     return out
 
 

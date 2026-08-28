@@ -7,6 +7,7 @@ import subprocess
 import unittest
 
 from lib.paths import data_path, path, source_path
+from parse.star import value
 
 TSV = data_path("star-cutoffs.tsv")
 # Each PDF costs a pdftotext subprocess, so re-read a few per run instead of all
@@ -30,6 +31,12 @@ SPOT = {
         "college": "國立政治大學",
         "dept": "東南亞語言與文化學士學位學程(印尼文組)",
         "quota": "2", "admitted": "2", "gpa_r2": "6.0",
+    },
+    # In old PDFs, round counts can sit on the department row rather than the
+    # 在校學業 row carrying the percentile standards.
+    ("108", "00213", "one2seven"): {
+        "dept": "華語文教學系應用華語文學組", "admitted": "8",
+        "r1_n": "7", "r2_n": "1",
     },
     # 第八類學群 screens to twice the quota rather than admitting.
     ("110", "00159", "eight"): {
@@ -83,6 +90,9 @@ class TestStar(unittest.TestCase):
             for k in ("gpa_r1", "gpa_r2", "gpa"):
                 if r[k]:
                     self.assertTrue(0 < float(r[k]) <= 100, f"{r[k]} in {r['dept']}")
+
+    def test_same_score_marker_is_not_part_of_percentile(self):
+        self.assertEqual(value("1%＊"), 1.0)
 
     def test_names_are_never_blank(self):
         for r in self.rows:

@@ -9,7 +9,6 @@ Writes apply/colleges.tsv so `python -m parse.apply` needs no network.
 
 import argparse
 import csv
-import glob
 import os
 import sys
 import time
@@ -23,7 +22,25 @@ BASE = "https://www.cac.edu.tw/cacportal/apply_his_report"
 
 
 def cached(year):
-    return bool(glob.glob(os.path.join(OUT, f"{year}-*.png")))
+    return os.path.exists(os.path.join(OUT, f"{year}.complete"))
+
+
+def mark_complete(year):
+    with open(os.path.join(OUT, f"{year}.complete"), "w", encoding="ascii") as handle:
+        handle.write("all colleges listed by CAC downloaded\n")
+
+
+def statistics(year):
+    """Cache CAC's annual quota and placement totals; return bytes downloaded."""
+    target = os.path.join(OUT, f"{year}-statistics.html")
+    if os.path.exists(target):
+        return 0
+    body = get(f"{BASE}/{year}/{year}_member_statistics.php")
+    if not body:
+        raise RuntimeError(f"CAC statistics unavailable for {year}")
+    with open(target, "wb") as handle:
+        handle.write(body)
+    return len(body)
 
 
 def known_colleges(path):
@@ -39,22 +56,31 @@ def main(years, refresh=False):
     college_path = os.path.join(OUT, "colleges.tsv")
     t0, total, seen = time.time(), 0, known_colleges(college_path)
     for year in years:
+        total += statistics(year)
         if cached(year) and not refresh:
             print(f"{year} cached; pass --refresh to check CAC", file=sys.stderr)
             continue
         listed = {c: n.strip() for c, n in colleges(year, "one2seven").items()}
+        complete = bool(listed)
         for code, name in sorted(listed.items()):
             if WANT and name not in WANT:
                 continue
+            target = os.path.join(OUT, f"{year}-{code}.png")
+            if os.path.exists(target):
+                seen[(year, code)] = name
+                continue
             body = get(f"{BASE}/{year}/{year}_sieve_standard/report/pict/{code}.png")
             if not body:
+                complete = False
                 print(f"{year} ({code}) {name}  absent", file=sys.stderr)
                 continue
-            with open(os.path.join(OUT, f"{year}-{code}.png"), "wb") as f:
+            with open(target, "wb") as f:
                 f.write(body)
             total += len(body)
             seen[(year, code)] = name
             print(f"{year} ({code}) {name}  {len(body):>8} bytes", file=sys.stderr)
+        if complete and not WANT:
+            mark_complete(year)
     with open(college_path, "w", encoding="utf-8") as f:
         f.write("year\tcollege_code\tcollege\n")
         for (year, code), name in sorted(seen.items()):

@@ -215,6 +215,12 @@ class TestCoverageGaps(unittest.TestCase):
         self.assertEqual(residual[("114", "star")], 5)
         self.assertEqual(residual[("114", "tech_select")], 20)
 
+    def test_observations_outside_the_published_total_years_are_allowed(self):
+        data = rows([(0.5, 7)], year="115")
+        gaps, residual = uac.coverage_gaps(data, {("114", "uac"): 10})
+        self.assertEqual(gaps, {"114": 10})
+        self.assertEqual(residual, {("114", "uac"): 10})
+
 
 if __name__ == "__main__":
     unittest.main()
