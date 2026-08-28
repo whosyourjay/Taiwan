@@ -6,6 +6,8 @@ Joining on 志願代碼 recovers a weighted raw 學測 total that can be read ag
 the national subject distributions.
 """
 
+import glob
+import os
 import re
 import sys
 
@@ -26,10 +28,14 @@ def _clean_header(value):
 
 def workbook_rows(source):
     """Yield program dictionaries from the official XLS workbook."""
-    import xlrd
-
-    sheet = xlrd.open_workbook(source).sheet_by_index(0)
-    rows = (sheet.row_values(i) for i in range(sheet.nrows))
+    if source.lower().endswith(".xlsx"):
+        import openpyxl
+        book = openpyxl.load_workbook(source, read_only=True, data_only=True)
+        rows = book.worksheets[0].iter_rows(values_only=True)
+    else:
+        import xlrd
+        sheet = xlrd.open_workbook(source).sheet_by_index(0)
+        rows = (sheet.row_values(i) for i in range(sheet.nrows))
     iterator = iter(rows)
     headers = [_clean_header(value) for value in next(iterator)]
     for values in iterator:
@@ -103,12 +109,24 @@ def parse_pair(report, rules, year):
     return rows, len(cutoffs)
 
 
+def source_pairs():
+    """Annual (year, screen report, rules workbook) triples on disk."""
+    for report in sorted(glob.glob(source_path(
+            "tech", "jctv-*-xuece-screen.pdf"))):
+        year = re.search(r"jctv-(\d+)-", os.path.basename(report)).group(1)
+        rules = glob.glob(source_path("tech", f"jctv-{year}-xuece-rules.*"))
+        if len(rules) != 1:
+            raise ValueError(f"expected one {year} rules workbook, found {len(rules)}")
+        yield year, report, rules[0]
+
+
 def main(out_path):
-    year = "110"
-    report = source_path("tech", f"jctv-{year}-xuece-screen.pdf")
-    rules = source_path("tech", f"jctv-{year}-xuece-rules.xls")
-    rows, reported = parse_pair(report, rules, year)
-    print(f"{year}: {len(rows)} of {reported} reported thresholds joined", file=sys.stderr)
+    rows = []
+    for year, report, rules in source_pairs():
+        got, reported = parse_pair(report, rules, year)
+        print(f"{year}: {len(got)} of {reported} reported thresholds joined",
+              file=sys.stderr)
+        rows.extend(got)
     written = tsvio.write_rows(out_path, rows)
     print(f"wrote {written} rows to {out_path}", file=sys.stderr)
 

@@ -14,13 +14,13 @@ of the academic-track students also took 分科測驗.
 
 | Path | How it works | Seats | Our coverage |
 | --- | --- | ---: | --- |
-| 一般大學 分發入學 | 指考 + ranked preferences | 32,497 | Full, 108–114 |
-| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 | 64 schools, 110–111 |
-| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 | 62 schools, 110–111 |
+| 一般大學 分發入學 | 指考 + ranked preferences | 32,497 | Full, 107–114 |
+| 一般大學 繁星推薦 | High-school rank + 學測; school nomination | 14,543 | 110: 68 schools; 111: 6 |
+| 一般大學 申請入學 | 學測 screen, then review/interview | 44,025 | 110: 67 schools; 111: 6 |
 | 一般大學 其他管道 | Special selection and school-run admissions | 5,087 | Not handled |
-| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 | Full general intake, 108–114 |
+| 四技二專 聯合登記分發 | 統測 score + ranked preferences | 16,229 | Full general intake, 107–115 |
 | 四技二專 甄選入學 | 統測 screen, then review/interview | 24,426 | Count only; not scored |
-| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 | Bridge evidence, 110 |
+| 四技日間部 申請入學 | 學測 screen, then review/interview | 5,490 | Bridge evidence, 107–114 |
 | 四技二專 技優保送 / 甄審 | Competition results; direct or screened placement | 228 / 3,078 | Not handled |
 | 四技二專 特殊選才 | Skills, experience, or talent | 512 | Not handled |
 | 科技校院 繁星推薦 | School recommendation + rank | 1,976 | Not handled |
@@ -309,8 +309,37 @@ the evidence the loadings are fitted from.
 
 ## Sources
 
+### Parsed coverage
+
+This is coverage in the parsed inputs, not the range a publisher may hold. Full
+means the central table was parsed for all schools or programs it reports;
+partial means we collected only named schools or districts.
+
+| Use | Publisher and table | Years | Coverage |
+| --- | --- | --- | --- |
+| Ranking | UAC 分發入學 final cutoffs | 107–114 | Full; 1,720–1,885 admitted 系組 per year |
+| Ranking | JCTV 四技二專聯合登記分發 final cutoffs | 107–115 | Full general intake; 2,013–2,713 admitted 系科組 per year |
+| Ranking | CAC 繁星推薦 standards | 110; 111 | Partial: 68 schools / 3,015 rows; 6 schools / 294 rows |
+| Ranking | CAC 個人申請 first-stage screens | 110; 111 | Partial: 67 schools / 2,004 rows; 6 schools / 276 rows |
+| Ranking and pool | CEEC 學測 native distributions | 95–115 | Five-subject totals through 107; subject or exact combination tables from 107 |
+| Ranking and pool | CEEC 指考 / 分科 distributions | 107–115 | Raw-score subjects in 107–110; 60-level subjects in 111–115 |
+| Ranking | CEEC 學測使用於分發入學 distributions | 111–115 | Full published subject tables |
+| Ranking and pool | TCTE 統測 score distributions, report B2 | 108–114 | Full published subject tables |
+| Pool bridge | JCTV 四技日間部申請 first-stage report + rules | 107–114 | 4,704 joined program-years; one 112 row does not join |
+| Coverage audit | MOE annual admissions tables A1-17/A1-18 | 108–114 | Five route totals per year |
+| Ranking labels | MOE university department student counts | 113 | Full file; gender columns only |
+| High-school model | MOE national CAP mark/category distributions | 107 | Full national distribution |
+| High-school model | Published CAP entry cutoffs | 107; 114 | Partial: 52 基北 schools; 157 schools in six districts |
+| High-school model | MOE high-school roll and graduate counts | 103–114 | 518–529 schools per year |
+| Auxiliary | 北一女 graduate destinations | 110 | One school; grouped cells remain censored |
+| Collection infrastructure | MOE 免試入學 district roster | 115 | All 15 districts; it supplies hosts, not school scores |
+
+The 115 high-school website-document inventory is a collection audit, not a
+model input, so its 613 candidates are not counted as source coverage here.
+
 一般大學, 分發入學 (學測 + 分科測驗). 各系組最低錄取標準及錄取人數一覽表:
 
+    https://www2.uac.edu.tw/107data/107_02.pdf
     https://www2.uac.edu.tw/{year}data/{year}_04.pdf            # 108-114
 
 科技大學, 四技二專聯合登記分發 (統測). 各校系科組學程錄取總成績統計表:
@@ -325,8 +354,8 @@ split into 第一類至第七類學群 and 第八類學群 (medicine):
 
     https://www.cac.edu.tw/cacportal/star_his_report/{year}/{year}_result_standard/{one2seven,eight}/{code}/{year}Standard_{code}.pdf
 
-Text PDFs in fixed columns. Downloaded for every school listed in 110 and 111,
-into `sources/star/` -> `data/star-cutoffs.tsv`. See Method.
+Text PDFs in fixed columns. Downloaded for 68 named schools in 110 and six in
+111, into `sources/star/` -> `data/star-cutoffs.tsv`. See Method.
 
 一般大學, 個人申請 (學測). 第一階段篩選標準一覽表:
 
@@ -338,11 +367,11 @@ and OCR'd into `data/apply-cutoffs.tsv`. See Method.
 技專校院入學測驗中心, 統測 成績人數累計表 (open data 報表B2). One PDF a year,
 saved by hand as `sources/tech/tcte-{year}-scores.pdf` for 108-114.
 
-科技校院日間部四年制申請入學, 110 第一階段最低篩選標準 and the companion
+科技校院日間部四年制申請入學, 107–114 第一階段最低篩選標準 and the companion
 招生學校系(組)、學程 data workbook:
 
-    https://www.jctv.ntut.edu.tw/downloads/110/caac/repot_01.pdf
-    https://www.jctv.ntut.edu.tw/downloads/110/caac/110_caac_minute.xls
+    https://www.jctv.ntut.edu.tw/downloads/{year}/caac/repot_01.pdf
+    https://www.jctv.ntut.edu.tw/downloads/{year}/caac/{year}_caac_minute.{xls,xlsx}
 
 北一女中 110 學年度畢業生大學校系錄取人數統計表, in the 111 school-day
 handbook, pages 16–17:
@@ -374,12 +403,13 @@ Downloaded inputs and auxiliary tables:
   Only validated rows that match a 分發入學 department contribute to `score`.
 - `sources/ceec/` — 大考中心 score distributions (級分人數百分比累計表 and friends,
   .xls, back to year 91) for 學測 and 分科測驗. `parse.ceec` extracts
-  108-114 into `data/ceec-scores.tsv`; these distributions refine the ordering of
+  the usable 95–115 tables into `data/ceec-scores.tsv`; these distributions refine the ordering of
   分發入學 cutoffs as described in Method.
 - `sources/tech/tcte-*-scores.pdf` — 統測 成績人數累計表, one-point bands over 42
   subjects. `parse.tcte` extracts 108-114 into `data/tongce-scores.tsv`. The
   experimental pool model uses it; the ranking bridge still uses `norm`.
-- `sources/tech/jctv-110-xuece-{screen.pdf,rules.xls}` — 科技校院四年制申請入學
+- `sources/tech/jctv-{107..114}-xuece-screen.pdf` and the matching
+  `rules.{xls,xlsx}` — 科技校院四年制申請入學
   第一階段最低篩選標準 and its per-program weights and quotas. Together they
   produce `data/tech-apply-cutoffs.tsv` for the experimental test-pool fit.
 - `sources/high-school/fg-110-destinations.pdf` — 北一女 110 graduate destinations.
@@ -414,7 +444,7 @@ Run commands from the repository root. Install Python packages with
     python3 -m fetch.assessment_pool
     python3 -m parse.assessment_pool  # -> assessment-pool.tsv for compare/
     python3 -m fetch.tech_apply
-    python3 -m parse.tech_apply  # 110 四技申請 -> data/tech-apply-cutoffs.tsv
+    python3 -m parse.tech_apply  # 107–114 四技申請 -> data/tech-apply-cutoffs.tsv
     python3 -m fetch.high_school
     python3 -m parse.high_school  # 110 北一女 -> data/high-school-destinations.tsv
     python3 -m fetch.entry

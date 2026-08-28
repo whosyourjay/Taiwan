@@ -15,7 +15,7 @@ matched department-years: the same department awarding the same degree, with no
 assumption about relative ability of the 高中 and 高職 pools. Each row then maps
 its own cutoff onto that common coordinate.
 
-Scores average all available rank evidence (108-114) within each admission path,
+Scores average all available rank evidence (107-115) within each admission path,
 then average paths by their annual admitted seats. Official totals report missing
 coverage but do not affect scores. Entities that closed or merged remain in the
 output, with `last_year` saying when they were last seen.

@@ -2,12 +2,13 @@
 
 Three layouts, on two different scales:
 
-  108-110  各科成績人數累計表 — 指考, raw marks binned to 100 points, each subject
+  107-110  各科成績人數累計表 — 指考, raw marks binned to 100 points, each subject
            its own sheet block, scores split across two side-by-side halves.
-  111-114  各科級分人數百分比累計表 — 分科測驗, and the companion
+  111-115  各科級分人數百分比累計表 — 分科測驗, and the companion
            學測使用於分發入學 table, both already on the 60-point 級分 scale the
            分發入學 formulas count.
-  100-114  各科級分人數分布表 — 學測 on its own 0-15 級分 scale, counted over
+  95-115   五科總級分 or subject/combination tables — 學測 on its own
+           0-15 級分 scale, counted over
            everyone who sat the exam rather than the 分發入學 entrants alone.
            繁星 and 個人申請 quote this scale, so it is a separate `exam`.
 
@@ -34,12 +35,21 @@ from lib.paths import data_path, source_path
 GRADES = "ceec/zhikao/*各科級分人數百分比累計表*.xls"
 MARKS = "ceec/zhikao/*各科成績人數累計表*.xls"
 # CEEC renamed these mid-series (分布表 -> 百分比累計表) and some years ship the
-# same table twice, once cumulated downwards. Only the 分布表 spelling is taken
-# for now, which covers 108-112; widening it needs deduplication first.
-GSAT = "ceec/xuece/*各科級分人數分布表*.xls"
-GSAT_COMBO = "ceec/xuece/*2至4科不同科目組合級分人數分布表*.xls"
-GSAT_TOTAL = "ceec/xuece/*總級分人數統計表*.xls"
-YEARS = range(108, 115)
+# same table twice, once cumulated downwards. ``main`` deduplicates identical
+# score rows and rejects conflicting copies.
+GSAT = (
+    "ceec/xuece/*各科級分人數分布表*.xls",
+    "ceec/xuece/*各科級分人數百分比累計表*.xls",
+)
+GSAT_COMBO = (
+    "ceec/xuece/*2至4科不同科目組合級分人數分布表*.xls",
+    "ceec/xuece/*2至4科不同科目組合級分人數百分比累計表*.xls",
+)
+GSAT_TOTAL = (
+    "ceec/xuece/*總級分人數統計表*.xls",
+    "ceec/xuece/*SAT_stat_23.xls",
+)
+YEARS = range(107, 116)
 # The five-subject total stops where the combination tables start, so the two
 # never describe the same year and no total is counted twice.
 TOTAL_YEARS = range(95, 108)
@@ -125,7 +135,7 @@ def read_totals(sheet):
 
 def reader_for(name):
     """Which of the three layouts a statistics workbook is written in."""
-    if "總級分" in name:
+    if "總級分" in name or "SAT_stat_23" in name:
         return read_totals
     return read_grades if "級分" in name else read_marks
 
@@ -138,7 +148,7 @@ def exam_of(path):
     denominators over different populations, so they stay separate.
     """
     name = os.path.basename(path)
-    if "學測使用於分發入學" in name:
+    if re.search(r"學測.*使用於分發入學", name):
         return "xuece"
     if f"{os.sep}xuece{os.sep}" in path:
         return "gsat"
@@ -163,8 +173,9 @@ def parse(path):
 
 
 def main(out_path):
-    rows = []
-    for pattern in (GRADES, MARKS, GSAT, GSAT_COMBO, GSAT_TOTAL):
+    rows = {}
+    patterns = (GRADES, MARKS, *GSAT, *GSAT_COMBO, *GSAT_TOTAL)
+    for pattern in patterns:
         for source in sorted(glob.glob(source_path(pattern))):
             got = parse(source)
             if got:
@@ -172,12 +183,20 @@ def main(out_path):
                 print(f"{os.path.basename(source)[:44]:<46} {len(got):>5} rows, "
                       f"{subs} subjects",
                       file=sys.stderr)
-                rows.extend(got)
+                for row in got:
+                    key = row[:4]
+                    if key in rows and rows[key] != row[4]:
+                        raise ValueError(f"conflicting duplicate score row {row}")
+                    rows[key] = row[4]
+    ordered = sorted(
+        ((*key, seats) for key, seats in rows.items()),
+        key=lambda row: (int(row[0]), row[1], row[2], row[3]),
+    )
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("year\texam\tsubject\tscore\tseats\n")
-        for row in rows:
+        for row in ordered:
             f.write("\t".join(str(x) for x in row) + "\n")
-    print(f"wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    print(f"wrote {len(ordered)} rows to {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

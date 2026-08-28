@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from rank.ceec_score import ScoreDistributions, calibrate_fallbacks
-from parse.ceec import mark_midpoint
+from parse.ceec import exam_of, mark_midpoint
 
 
 def score_rows(year, exam, subject, scores):
@@ -17,6 +17,12 @@ def score_rows(year, exam, subject, scores):
         }
         for score, seats in scores
     ]
+
+
+class TestExamName(unittest.TestCase):
+    def test_115_underscore_still_identifies_distribution_scale_gsat(self):
+        path = "ceec/zhikao/115學測_使用於分發入學採計_各科級分人數累計表.xls"
+        self.assertEqual(exam_of(path), "xuece")
 
 
 class TestScoreDistributions(unittest.TestCase):
