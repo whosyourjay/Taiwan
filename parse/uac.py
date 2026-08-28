@@ -7,6 +7,7 @@ its 100-point scale.
 """
 
 import glob
+import gzip
 import os
 import re
 import subprocess
@@ -57,10 +58,25 @@ def split_prefix(prefix, carry):
 
 def pdf_text(pdf):
     txt = os.path.splitext(pdf)[0] + ".txt"
-    if not os.path.exists(txt):
-        subprocess.run(["pdftotext", "-layout", pdf, txt], check=True)
-    with open(txt, encoding="utf-8", errors="replace") as f:
-        return f.read()
+    compressed = txt + ".gz"
+    plain_is_newer = (os.path.exists(txt) and
+                      (not os.path.exists(compressed) or
+                       os.path.getmtime(txt) > os.path.getmtime(compressed)))
+    if plain_is_newer:
+        with open(txt, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    if os.path.exists(compressed):
+        with gzip.open(compressed, "rt", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    result = subprocess.run(
+        ["pdftotext", "-layout", pdf, "-"], check=True,
+        stdout=subprocess.PIPE,
+    )
+    temporary = compressed + ".part"
+    with gzip.open(temporary, "wb") as handle:
+        handle.write(result.stdout)
+    os.replace(temporary, compressed)
+    return result.stdout.decode("utf-8", "replace")
 
 
 def parse(pdf, year):

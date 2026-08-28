@@ -43,6 +43,10 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 - `rankings/rank-departments.tsv` — 3,040 (institution, department) pairs
 - `rankings/rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
   department merging
+- `rankings/ability-universities.tsv` — final school scores under current names,
+  with predecessor names in `former_schools`
+- `rankings/ability-{departments,groups}.tsv` — the same ability scale below
+  school level, retaining each source year's school name
 - `figures/` — every generated figure, built by `python3 -m viz`
 - `data/high-school-destinations.tsv` — 110 北一女 graduate destinations
 - `data/high-school-entry-cutoffs.tsv` — high-school entry cutoffs by district
@@ -52,8 +56,12 @@ Columns: `rank school school_en [dept dept_en [application_group
 application_group_en]] score years last_year seats_avg uac tech star star_eight apply men
 women pct_women`
 
-`school_en`, `dept_en` and `application_group_en` are generated through Google
-Translate and cached in `data/name-english.tsv`.
+`school_en`, `dept_en` and `application_group_en` use the local
+`data/name-english.tsv` cache. Ranking builds never contact a translation
+service; `python3 translate_names.py` is the explicit, optional cache refresh.
+
+The ability tables' `years` column counts distinct source years. Their filled
+exam columns already show which exam readings contributed.
 
 `data/high-school-destinations.tsv` uses the columns `year high_school destination
 destination_type students reporting_floor graduates source_date`. Filter
@@ -393,7 +401,7 @@ handbook, pages 16–17:
 Downloaded inputs and auxiliary tables:
 
 - `sources/uac/` and `sources/tech/union42-*.pdf` — the two 分發 cutoff tables above, next to the
-  `pdftotext -layout` dump each parser caches on first run.
+  gzip-compressed `pdftotext -layout` dump each parser caches on first run.
 - `data/admission-totals.tsv` — actual 108–114 admissions from the annual MOE
   Education Statistics tables A1-17 (editions 109–114) and A1-18 (edition 115).
   The ranking command reports gaps against these counts; they do not affect scores.
@@ -465,6 +473,13 @@ Run commands from the repository root. Install Python packages with
 Both CAC fetchers take the schools named in their `WANT` list, or every school
 the year lists when that list is empty. `sources/star/` and `sources/apply/` hold
 the whole-year download; the eight names in `fetch/star.py` cut it to a few seconds.
+
+Fetch commands trust saved sources and manifests, so a warm run makes no network
+requests. Discovery-based fetchers accept `--refresh` for an intentional upstream
+check; single-file fetchers retrieve only missing targets. Local PDF text caches
+can be compacted at a 50% duty cycle with
+`python3 -m tools.compress_text_caches`; parsers read the resulting `.txt.gz`
+files directly.
 
 `rank/uac.py` pulls the 教育部 CSV through `rank/gender.py` on first run. Both
 group departments by the 系組 name normalisation in `lib/deptname.py`, and

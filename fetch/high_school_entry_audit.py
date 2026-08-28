@@ -21,6 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from lib import tsvio
 from lib.paths import data_path
 
 
@@ -426,6 +427,17 @@ def select_schools(rows, codes, limit):
 
 
 def run(args):
+    if (not args.refresh and os.path.exists(args.coverage)
+            and os.path.exists(args.candidates)):
+        coverage = list(tsvio.read_rows(args.coverage))
+        candidates = list(tsvio.read_rows(args.candidates))
+        for row in coverage:
+            for field in ("reachable", "search_results", "candidate_documents"):
+                row[field] = int(row[field] or 0)
+        print("using cached school audit; pass --refresh to contact sites",
+              file=sys.stderr)
+        summarize(coverage, candidates, args)
+        return
     schools = select_schools(
         directory_rows(args.directory_url, args.timeout),
         args.school_code,
@@ -491,10 +503,12 @@ def arguments(argv=None):
     ))
     parser.add_argument("--school-code", action="append", default=[])
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout", type=float, default=10)
     parser.add_argument("--max-results", type=int, default=200)
     parser.add_argument("--keywords", nargs="+", default=list(KEYWORDS))
+    parser.add_argument("--refresh", action="store_true",
+                        help="ignore complete cached output and contact sites")
     args = parser.parse_args(argv)
     if (args.workers < 1 or args.timeout <= 0 or args.max_results < 1 or
             not args.keywords):

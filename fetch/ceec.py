@@ -1,5 +1,6 @@
 """Download CEEC statistics PDFs for 學測 (GSAT) and 分科測驗/指考."""
 
+import argparse
 import os
 import re
 import urllib.parse
@@ -51,10 +52,21 @@ def data_links(page_url):
     return out
 
 
-def main():
+def populated(directory):
+    """Whether a previous run left any downloaded source in a directory."""
+    if not os.path.isdir(directory):
+        return False
+    with os.scandir(directory) as entries:
+        return any(not entry.name.startswith(".") for entry in entries)
+
+
+def main(refresh=False):
     for exam, index_id in INDEXES.items():
         outdir = source_path("ceec", exam)
         os.makedirs(outdir, exist_ok=True)
+        if populated(outdir) and not refresh:
+            print(f"cached  {outdir}; pass --refresh to check upstream")
+            continue
         for page_url, title in year_pages(index_id).items():
             year = re.match(r"(\d+)", title)
             year = year.group(1) if year else "unknown"
@@ -75,4 +87,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--refresh", action="store_true")
+    main(parser.parse_args().refresh)

@@ -353,7 +353,7 @@ def arguments(argv=None):
     parser.add_argument("--plan", default=PLAN)
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--prune", action="store_true")
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--extract-timeout", type=float, default=60)
     args = parser.parse_args(argv)
     if args.workers < 1 or args.extract_timeout <= 0:

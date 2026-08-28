@@ -7,6 +7,7 @@ Those counts are the entrant totals that turn a school's cutoff into a share of
 the district rather than a bare score.
 """
 
+import argparse
 import concurrent.futures
 import os
 import re
@@ -25,7 +26,7 @@ UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 WANTED = "名額"
 PROBE_TIMEOUT = 5
 TIMEOUT = 45
-WORKERS = 5
+WORKERS = 2
 APP = "{host}/NoExamImitate_{code}/NoExamImitate/Apps"
 NEWS = APP + "/Page/Public/News.aspx"
 GETFILE = APP + "/Action/GetFile.ashx"
@@ -123,10 +124,21 @@ def district_files(row, outdir):
     return row["district"], f"{len(found)} announcements", saved
 
 
-def main():
+def populated(directory):
+    if not os.path.isdir(directory):
+        return False
+    with os.scandir(directory) as entries:
+        return any(not entry.name.startswith(".") for entry in entries)
+
+
+def main(refresh=False):
     rows = list(tsvio.read_rows(data_path(DISTRICTS)))
     outdir = source_path(OUTDIR)
     os.makedirs(outdir, exist_ok=True)
+    if populated(outdir) and not refresh:
+        print(f"cached quota files in {outdir}; pass --refresh to check upstream",
+              file=sys.stderr)
+        return 0
     with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
         results = list(pool.map(lambda row: district_files(row, outdir), rows))
     total = 0
@@ -140,4 +152,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--refresh", action="store_true")
+    sys.exit(main(parser.parse_args().refresh))

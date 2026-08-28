@@ -1,4 +1,4 @@
-"""Generate and cache convenient English labels with Google Translate."""
+"""Read convenient English labels, with translation as an explicit operation."""
 
 import csv
 
@@ -57,11 +57,18 @@ def translate(missing, translator=None):
     return found
 
 
-def english_names(names, path=CACHE, translator=None):
-    """English for every supplied label, translating and caching new labels."""
+def english_names(names, path=CACHE, translator=None, translate_missing=False):
+    """Cached English labels for ``names``.
+
+    Ordinary ranking builds are deliberately offline.  Supplying a translator
+    or opting into ``translate_missing`` makes this the explicit cache-filling
+    operation used by ``translate_names.py``.
+    """
     cached = load_cache(path)
     missing = sorted({name for name in names if name and name not in cached})
-    if translator is None and missing:
+    if not missing or (translator is None and not translate_missing):
+        return cached
+    if translator is None:
         from deep_translator import GoogleTranslator
         translator = GoogleTranslator(source="zh-TW", target="en")
     for start in range(0, len(missing), CHUNK):

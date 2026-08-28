@@ -246,9 +246,31 @@ class TestTable(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertAlmostEqual(got[0]["ability"], 85.0)
         self.assertAlmostEqual(got[0]["spread"], 10.0)
-        self.assertEqual(got[0]["exams"], 2)
+        self.assertEqual(got[0]["years"], 1)
         self.assertAlmostEqual(got[0]["zhikao"], 90.0)
         self.assertAlmostEqual(got[0]["gsat"], 80.0)
+
+    def test_years_counts_distinct_source_years(self):
+        first = row("uac", 10)
+        second = row("uac", 10)
+        second["year"] = "111"
+        scored = [(first, "zhikao", 0.8, 10),
+                  (second, "zhikao", 0.9, 10)]
+        got = ability.table(scored, ("school", "dept"), EXAMS)
+        self.assertEqual(got[0]["years"], 2)
+
+    def test_final_schools_use_current_name_and_keep_predecessors(self):
+        yang_ming = row("uac", 10, school="國立陽明大學")
+        chiao_tung = row("uac", 30, school="國立交通大學")
+        scored = [(yang_ming, "zhikao", 0.8, 10),
+                  (chiao_tung, "zhikao", 0.9, 30)]
+        got = ability.table(scored, ("school",), EXAMS)[0]
+        self.assertEqual(got["school"], "國立陽明交通大學")
+        self.assertEqual(got["school_en"],
+                         "National Yang Ming Chiao Tung University")
+        self.assertEqual(got["former_schools"], "國立陽明大學 | 國立交通大學")
+        self.assertAlmostEqual(got["ability"], 87.5)
+        self.assertAlmostEqual(got["seats"], 40.0)
 
     def test_generated_names_follow_each_chinese_name(self):
         english = {"A大學": "University A", "電機系": "Electrical Engineering"}
@@ -354,13 +376,14 @@ class TestCollect(unittest.TestCase):
     def test_a_key_carries_its_seats_once_overall_and_once_per_exam(self):
         scored = ability.read([row("uac", 30, ceec_percentile=0.9),
                                row("apply", 70, cohort_top=0.2)], STRAIGHT)
-        moment, weight = ability.collect(scored, ("school",))
+        moment, weight, years = ability.collect(scored, ("school",))
         got = weight[("A大學",)]
         self.assertAlmostEqual(got["all"], 100.0)
         self.assertAlmostEqual(got["zhikao"], 30.0)
         self.assertAlmostEqual(got["gsat"], 70.0)
         # 個申's bar clears the top 20%, so it enters the curve at 0.8.
         self.assertAlmostEqual(moment[("A大學",)]["all"], 0.9 * 30 + 0.8 * 70)
+        self.assertEqual(years[("A大學",)], {"110"})
 
 
 if __name__ == "__main__":

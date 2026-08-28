@@ -1,7 +1,10 @@
 """Regression tests for the high-school entry-report audit."""
 
 import ssl
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from fetch import high_school_entry_audit as audit
 
@@ -11,6 +14,30 @@ class TestOfficialDirectoryCompatibility(unittest.TestCase):
         self.assertFalse(
             audit.SSL_CONTEXT.verify_flags & ssl.VERIFY_X509_STRICT
         )
+
+
+class TestWarmRun(unittest.TestCase):
+    def test_complete_outputs_prevent_directory_and_site_requests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            coverage = Path(directory) / "coverage.tsv"
+            candidates = Path(directory) / "candidates.tsv"
+            coverage.write_text(
+                "reachable\tdiscovery\tsearch_results\tcandidate_documents\n"
+                "1\tnss\t2\t1\n", encoding="utf-8"
+            )
+            candidates.write_text("document_url\nhttps://example/a.pdf\n",
+                                  encoding="utf-8")
+            args = audit.arguments([
+                "--coverage", str(coverage),
+                "--candidates", str(candidates),
+            ])
+            with mock.patch.object(
+                    audit, "directory_rows",
+                    side_effect=AssertionError("warm run contacted the network")):
+                audit.run(args)
+
+    def test_cold_run_defaults_to_four_workers(self):
+        self.assertEqual(audit.arguments([]).workers, 4)
 
 
 class TestNSSAttachments(unittest.TestCase):

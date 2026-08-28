@@ -700,7 +700,7 @@ def write(path, header, ranked, counts, english):
             fields = [str(i)]
             names = d["key"] if isinstance(d["key"], tuple) else (d["key"],)
             for name in names:
-                fields += [name, english.get(name, name)]
+                fields += [name, english.get(name, "")]
             fields += [f"{d['score']:.2f}", str(d["years"]), str(d["last_year"])]
             fields += [f"{d['seats_avg']:.1f}"]
             fields += [f"{d['by_path'][p]:.2f}" if p in d["by_path"] else ""

@@ -8,13 +8,15 @@ Codes come from the per-year college list page, so a school absent that year is
 skipped rather than downloaded blind.
 """
 
+import argparse
+import glob
 import os
 import re
 import sys
 import time
 import urllib.error
 import urllib.request
-from lib.paths import path, source_path
+from lib.paths import source_path
 
 OUT = source_path("star")
 
@@ -69,10 +71,17 @@ def fetch(year, group, code):
     return len(body)
 
 
-def main(years):
+def cached(year):
+    return bool(glob.glob(os.path.join(OUT, f"{year}-*.pdf")))
+
+
+def main(years, refresh=False):
     os.makedirs(OUT, exist_ok=True)
     t0, total = time.time(), 0
     for year in years:
+        if cached(year) and not refresh:
+            print(f"{year} cached; pass --refresh to check CAC", file=sys.stderr)
+            continue
         for group in GROUPS:
             listed = colleges(year, group)
             for code, name in sorted(listed.items()):
@@ -86,4 +95,8 @@ def main(years):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["110"])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("years", nargs="*", default=["110"])
+    parser.add_argument("--refresh", action="store_true")
+    args = parser.parse_args()
+    main(args.years, args.refresh)

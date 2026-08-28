@@ -94,6 +94,12 @@ def write_manifest(path, rows):
 
 
 def run(args):
+    if not args.refresh and os.path.exists(args.manifest):
+        rows = list(tsvio.read_rows(args.manifest))
+        print("using cached document manifest; pass --refresh to retry downloads",
+              file=sys.stderr)
+        summarize(rows, args.manifest)
+        return
     os.makedirs(args.outdir, exist_ok=True)
     urls = sorted({row["document_url"] for row in tsvio.read_rows(args.input)})
     rows = []
@@ -109,9 +115,13 @@ def run(args):
                       file=sys.stderr)
     rows.sort(key=lambda row: row["document_url"])
     write_manifest(args.manifest, rows)
+    summarize(rows, args.manifest)
+
+
+def summarize(rows, manifest):
     failures = sum(row["status"] == "failed" for row in rows)
-    total = sum(row["bytes"] for row in rows)
-    print(f"wrote {len(rows)} rows to {args.manifest}", file=sys.stderr)
+    total = sum(int(row["bytes"] or 0) for row in rows)
+    print(f"{len(rows)} rows in {manifest}", file=sys.stderr)
     print(f"{total:,} bytes; {failures} failed", file=sys.stderr)
 
 
@@ -120,10 +130,12 @@ def arguments(argv=None):
     parser.add_argument("--input", default=INPUT)
     parser.add_argument("--outdir", default=OUTDIR)
     parser.add_argument("--manifest", default=MANIFEST)
-    parser.add_argument("--workers", type=int, default=12)
+    parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--max-bytes", type=int, default=50_000_000)
+    parser.add_argument("--refresh", action="store_true",
+                        help="retry URLs instead of trusting the saved manifest")
     args = parser.parse_args(argv)
     if (args.workers < 1 or args.timeout <= 0 or args.retries < 0 or
             args.max_bytes < 1):

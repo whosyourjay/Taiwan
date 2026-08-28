@@ -26,6 +26,33 @@ LEVELS = (
     ("ability-departments.tsv", ("school", "dept")),
     ("ability-groups.tsv", ("school", "dept", "application_group")),
 )
+SCHOOL_SUCCESSORS = {
+    "國立陽明大學": "國立陽明交通大學",
+    "國立交通大學": "國立陽明交通大學",
+    "國立高雄科技大學(原國立高雄第一科技大學)": "國立高雄科技大學",
+    "國立高雄科技大學(原國立高雄應用科技大學)": "國立高雄科技大學",
+    "國立高雄科技大學(原國立高雄海洋科技大學)": "國立高雄科技大學",
+    "慈濟科技大學": "慈濟大學",
+    "慈濟學校財團法人慈濟科技大學": "慈濟大學",
+}
+FORMER_SCHOOLS = {
+    "國立陽明交通大學": ("國立陽明大學", "國立交通大學"),
+    "國立高雄科技大學": (
+        "國立高雄第一科技大學", "國立高雄應用科技大學", "國立高雄海洋科技大學",
+    ),
+    "慈濟大學": ("慈濟科技大學",),
+}
+OFFICIAL_SCHOOL_ENGLISH = {
+    "國立陽明交通大學": "National Yang Ming Chiao Tung University",
+    "國立陽明大學": "National Yang-Ming University",
+    "國立交通大學": "National Chiao Tung University",
+    "國立高雄科技大學": "National Kaohsiung University of Science and Technology",
+    "國立高雄第一科技大學": "National Kaohsiung First University of Science and Technology",
+    "國立高雄應用科技大學": "National Kaohsiung University of Applied Sciences",
+    "國立高雄海洋科技大學": "National Kaohsiung Marine University",
+    "慈濟大學": "Tzu Chi University",
+    "慈濟科技大學": "Tzu Chi University of Science and Technology",
+}
 STAR = "star"
 STAR_EIGHT = "star_eight"
 GRID = 600
@@ -284,32 +311,55 @@ def read(rows, splines, means=None, cohort=None, sitting=None):
             for row in rows for exam, level in levels(row, splines, swept)]
 
 
+def current_key(row, columns):
+    """Output key, merging predecessor institutions only at school level."""
+    values = tuple(row[column] for column in columns)
+    if columns == ("school",):
+        return (SCHOOL_SUCCESSORS.get(values[0], values[0]),)
+    return values
+
+
 def collect(scored, columns):
     """Seat-weighted ability for each key, kept per exam and over all of them."""
     moment = collections.defaultdict(lambda: collections.defaultdict(float))
     weight = collections.defaultdict(lambda: collections.defaultdict(float))
+    years = collections.defaultdict(set)
     for row, exam, level, seats in scored:
-        key = tuple(row[column] for column in columns)
+        key = current_key(row, columns)
+        years[key].add(row["year"])
         for name in ("all", exam):
             moment[key][name] += level * seats
             weight[key][name] += seats
-    return moment, weight
+    return moment, weight, years
+
+
+def school_english(name, english):
+    """Prefer official English names for institutions involved in mergers."""
+    return OFFICIAL_SCHOOL_ENGLISH.get(name, english.get(name, ""))
 
 
 def table(scored, columns, exams, english=None):
     """One ranked row per key, at the seat-weighted ability of its thresholds."""
     english = english or {}
-    moment, weight = collect(scored, columns)
+    moment, weight, years = collect(scored, columns)
     out = []
     for key, sums in moment.items():
         seen = [sums[exam] / weight[key][exam] for exam in exams if weight[key][exam]]
         row = {"rank": 0}
         for column, value in zip(columns, key):
             row[column] = value
-            row[f"{column}_en"] = english.get(value, value)
+            row[f"{column}_en"] = (school_english(value, english)
+                                    if column == "school"
+                                    else english.get(value, ""))
+        if columns == ("school",):
+            former = FORMER_SCHOOLS.get(row["school"], ())
+            row["former_schools"] = " | ".join(former)
+            row["former_schools_en"] = " | ".join(
+                school_english(name, english) for name in former
+            )
         row["ability"] = round(100 * sums["all"] / weight[key]["all"], 2)
         row["seats"] = round(weight[key]["all"], 1)
-        row["exams"] = len(seen)
+        row["years"] = len(years[key])
         # How far apart this department's own exams place it, which is the error
         # left in the curves rather than anything about the department.
         row["spread"] = round(100 * (max(seen) - min(seen)), 2) if len(seen) > 1 else ""
@@ -325,7 +375,7 @@ def table(scored, columns, exams, english=None):
 
 def disagreement(scored, exams):
     """Seat-weighted gap between the exams scoring one department, by decile."""
-    moment, weight = collect(scored, ("school", "dept"))
+    moment, weight, _ = collect(scored, ("school", "dept"))
     bands = collections.defaultdict(list)
     for key, sums in moment.items():
         seen = [sums[exam] / weight[key][exam] for exam in exams if weight[key][exam]]
@@ -359,8 +409,9 @@ def pool_sizes(rows):
     scales = tiling.path_scales(placed, filled)
     seats = collections.defaultdict(float)
     for row, _, _ in placed:
-        seats[row["school"]] += (float(row["seats"])
-                                  * scales.get(row["path"], 1.0))
+        school = SCHOOL_SUCCESSORS.get(row["school"], row["school"])
+        seats[school] += (float(row["seats"])
+                          * scales.get(row["path"], 1.0))
     return seats, tiling.assessment_size(pool_fit.YEAR)
 
 
@@ -401,10 +452,10 @@ def report(scored, exams, rows):
 
 def main():
     rows, splines = curves()
-    names = {row[field] for row in rows
+    scored = read(rows, splines)
+    names = {row[field] for row, _, _, _ in scored
              for field in ("school", "dept", "application_group") if row.get(field)}
     english = english_names(names)
-    scored = read(rows, splines)
     exams = sorted({exam for _, exam, _, _ in scored})
     report(scored, exams, rows)
     seats, cohort = pool_sizes(rows)

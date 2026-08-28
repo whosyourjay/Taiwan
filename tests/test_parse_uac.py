@@ -1,7 +1,10 @@
 import unittest
+import gzip
+import tempfile
+from pathlib import Path
 
 from lib.paths import data_path
-from parse.uac import ART_MAX, max_score
+from parse.uac import ART_MAX, max_score, pdf_text
 
 
 class TestMaxScore(unittest.TestCase):
@@ -27,6 +30,16 @@ class TestMaxScore(unittest.TestCase):
         with open(source, encoding="utf-8") as f:
             worst = max(float(r["norm"]) for r in csv.DictReader(f, delimiter="\t"))
         self.assertLessEqual(worst, 1.0, "a cutoff exceeds its formula's maximum")
+
+
+class TestPdfTextCache(unittest.TestCase):
+    def test_reads_a_compressed_text_cache_without_the_pdf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pdf = Path(directory) / "report.pdf"
+            with gzip.open(str(pdf.with_suffix(".txt")) + ".gz", "wt",
+                           encoding="utf-8") as handle:
+                handle.write("招生資料")
+            self.assertEqual(pdf_text(str(pdf)), "招生資料")
 
 
 if __name__ == "__main__":

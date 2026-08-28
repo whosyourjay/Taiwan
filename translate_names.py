@@ -14,7 +14,7 @@ def main():
         if row.get(field)
     }
     before = len(load_cache())
-    translated = english_names(names)
+    translated = english_names(names, translate_missing=True)
     print(f"{len(names)} labels, {len(translated) - before} newly translated")
     print(f"Cache holds {len(translated)} labels at {CACHE}")
 
