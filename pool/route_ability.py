@@ -3,6 +3,8 @@
 
 from collections import defaultdict
 
+from uniability import shortfalls
+
 from lib import tsvio
 from lib.paths import data_path, ranking_path
 from pool import ability
@@ -42,13 +44,11 @@ def rows():
         covered[TOTAL_PATH.get(row["path"], row["path"])] += count
         yield {"family": family, "route": route,
                "ability": round(100 * level, 3), "seats": count}
-    for path, target in targets.items():
-        missing = max(target - covered[path], 0.0)
-        if missing:
-            route_path = "tech_apply" if path == "tech_select" else path
-            family, route = ROUTES[route_path]
-            yield {"family": family, "route": route,
-                   "ability": 0.0, "seats": missing}
+    for path, missing in shortfalls(targets, covered).items():
+        route_path = "tech_apply" if path == "tech_select" else path
+        family, route = ROUTES[route_path]
+        yield {"family": family, "route": route,
+               "ability": 0.0, "seats": missing}
 
 
 def main():

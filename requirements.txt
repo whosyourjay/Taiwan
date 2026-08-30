@@ -6,3 +6,4 @@ Pillow
 scipy
 xlrd
 deep-translator
+uniability @ git+https://github.com/whosyourjay/Uni-Compare.git@80806d9

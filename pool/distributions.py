@@ -5,6 +5,7 @@ if __package__ in (None, ""):
     import _bootstrap  # noqa: F401
 
 import numpy as np
+from uniability import CapacityError, consume_capacity
 
 from lib import tsvio
 from lib.paths import data_path, ranking_path
@@ -25,15 +26,12 @@ def filled(buckets, cutoff, seats):
                   if bucket[2] >= float(cutoff)), None)
     if start is None:
         return []
-    out, remaining = [], float(seats)
-    for low, high, _, candidates in buckets[start:]:
-        take = min(remaining, candidates)
-        if take > 0:
-            out.append((low, high, candidates, take))
-            remaining -= take
-        if remaining <= 1e-9:
-            break
-    return out if remaining <= 1e-9 else []
+    try:
+        pieces = consume_capacity(buckets[start:], seats, lambda bucket: bucket[3])
+    except CapacityError:
+        return []
+    return [(low, high, candidates, take)
+            for (low, high, _, candidates), take in pieces]
 
 
 def mapped(spline, low, high):
