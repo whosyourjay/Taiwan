@@ -49,8 +49,6 @@ def exam_of(row):
     A 統測 bar is a percentile inside the 群 that sat its 數學 paper, not
     inside 統測 as a whole, because no student sits two of those papers.
     """
-    if row["year"] != YEAR:
-        return None
     if row["path"] == "tech":
         return tcte.math_pool(row["group"])
     return EXAMS.get(row["path"])
@@ -91,7 +89,7 @@ def load_tech_apply(distributions):
             row["year"], row["subjects"], row["cutoff"]
         )
         top = None if percentile is None else 1.0 - percentile
-        if row["year"] != YEAR or top is None or top >= uac.NON_BINDING:
+        if top is None or top >= uac.NON_BINDING:
             continue
         row["system"], row["path"] = "tech", "tech_apply"
         uac.identify_department(row)
@@ -144,9 +142,8 @@ def report(pool_fit, observations, error):
 def source_rows():
     """Load only the admission rows that provide national percentile bars.
 
-    This intentionally avoids ``uac.build_rows()``. Pool fitting needs raw
-    thresholds, not the department-ranking bridge, so unrelated ranking paths
-    cannot change this experimental input.
+    Pool fitting and production ability scoring share these raw thresholds;
+    neither passes through a separate department-ranking bridge.
     """
     distributions = ceec_score.ScoreDistributions.load(
         data_path("ceec-scores.tsv"), data_path("tongce-scores.tsv")
@@ -166,9 +163,12 @@ def source_rows():
     return rows, len(apply_rows), len(tech_apply)
 
 
-def observations():
+def observations(year=YEAR):
     """Pair departments admitting through two exams on their raw thresholds."""
-    rows, apply_rows, tech_apply = source_rows()
+    rows, _, _ = source_rows()
+    rows = [row for row in rows if row["year"] == str(year)]
+    apply_rows = sum(row["path"] == "apply" for row in rows)
+    tech_apply = sum(row["path"] == "tech_apply" for row in rows)
     resolved = attach_apply_tops(rows)
     matched = model.matched(rows, exam_of, top_of)
     print(f"{resolved} of {apply_rows} 個人申請 bars read against the 學測 cohort",

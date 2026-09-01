@@ -25,12 +25,13 @@
 <main>
 <section class="fig" id="ladder">
   <header>
-    <p class="eyebrow">Ability pool · 110學年度</p>
+    <p class="eyebrow">Longitudinal ability · 107–115學年度</p>
     <h2>The system starts near the bottom fifth of the cohort—and fills every rung after.</h2>
-    <p class="lede">Every department threshold is placed on one age-cohort axis.
-      The top panel counts seats at each ability; the lower curve asks how many
-      measured seats are at least this selective. Technology programs supply much
-      of the lower bridge, while general universities dominate the upper tail.</p>
+    <p class="lede">Each year's department thresholds are placed on that year's
+      cohort axis, then combined with completed annual seats. The top panel counts
+      average annual seats at each ability; the lower curve asks how many seats are
+      at least this selective. Technology programs supply much of the lower bridge,
+      while general universities dominate the upper tail.</p>
   </header>
   <dl class="stat">
     <div><dt>Threshold seats</dt><dd id="ladder-seats"></dd></div>
@@ -40,17 +41,18 @@
   </dl>
   <div class="plot"><svg id="ladder-svg" aria-label="Seat density and cumulative seat ladder"></svg><div class="readout" id="ladder-tip"></div></div>
   <div class="legend" id="ladder-legend"></div>
-  <p class="caption">Seats are threshold weights, so a department observed on
-    several exams contributes to each reading. The empty lower stretch means no
-    readable admission bar reaches it; it does not mean nobody there attends college.</p>
+    <p class="caption">Seats are annual panel estimates, so missing route-years
+    retain explicit imputation methods instead of disappearing. The empty lower
+    stretch means no modeled admission margin reaches it; it does not mean nobody
+    there attends college.</p>
 </section>
 
 <section class="fig" id="bridge">
   <header>
     <p class="eyebrow">Exam populations</p>
     <h2>The 50th percentile is not the same student on every exam.</h2>
-    <p class="lede">Each density shows where one exam's candidates sit on the
-      shared ability axis, with every curve normalized to the same area. 分科測驗
+    <p class="lede">The representative 110 curves show where one exam's candidates
+      sit on the shared ability axis, with every density normalized to the same area. 分科測驗
       is selected from students who already sat 學測; the three 統測 pools draw
       different vocational tracks. A raw percentile can therefore move tens of
       points when carried across exams.</p>
@@ -103,7 +105,7 @@
 <section class="fig" id="beiyi">
   <header>
     <p class="eyebrow">One complete exit cohort · 北一女 110</p>
-    <h2>Half of the named destinations land at 95.25 or above.</h2>
+    <h2>Half of the named destinations land at <span id="beiyi-headline-median"></span> or above.</h2>
     <p class="lede">The school reports every destination, but names domestic
       universities only when at least ten graduates attend. The chart places the
       675 named domestic destinations on the university ability scale; grouped
@@ -112,7 +114,7 @@
   <dl class="stat">
     <div><dt>Named domestic</dt><dd id="beiyi-named"></dd></div>
     <div><dt>Named median</dt><dd id="beiyi-median"></dd></div>
-    <div><dt>At ability 90+</dt><dd id="beiyi-ninety"></dd></div>
+    <div><dt>At ability 80+</dt><dd id="beiyi-eighty"></dd></div>
     <div><dt>High-school entry floor</dt><dd id="beiyi-entry"></dd></div>
   </dl>
   <div class="plot"><svg id="beiyi-svg" aria-label="Beiyi graduate destinations by university ability"></svg><div class="readout" id="beiyi-tip"></div></div>

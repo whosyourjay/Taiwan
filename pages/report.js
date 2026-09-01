@@ -363,14 +363,15 @@ function beiyiFigure() {
   const named = rows.reduce((sum, row) => sum + row.students, 0);
   const expanded = rows.flatMap(row => Array(row.students).fill(row.ability)).sort((a, b) => a - b);
   const median = expanded[Math.floor(expanded.length / 2)];
-  const ninety = rows.filter(row => row.ability >= 90).reduce((sum, row) => sum + row.students, 0);
+  const eighty = rows.filter(row => row.ability >= 80).reduce((sum, row) => sum + row.students, 0);
   $("#beiyi-named").textContent = fmt.format(named);
   $("#beiyi-median").textContent = one(median);
-  $("#beiyi-ninety").textContent = `${fmt.format(ninety)} · ${one(100 * ninety / named)}%`;
+  $("#beiyi-headline-median").textContent = one(median);
+  $("#beiyi-eighty").textContent = `${fmt.format(eighty)} · ${one(100 * eighty / named)}%`;
   $("#beiyi-entry").textContent = DATA.entry_floor ? `top ${one(DATA.entry_floor.top_share)}%` : "—";
   const svg = svgFrame("#beiyi-svg", 960, 540);
   const box = {x0: 235, x1: 875, y0: 42, y1: 520};
-  const low = 70;
+  const low = 65;
   xAxis(svg, box, low, 100, 5, "destination university ability", 30);
   rows.forEach((row, index) => destinationRow(svg, row, index, box, low));
   destinationSummary(named);

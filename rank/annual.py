@@ -1,4 +1,4 @@
-"""Complete the ranking as an annual department-by-route panel.
+"""Complete ability as an annual department-by-route panel.
 
 Observed cutoffs supply both seats and ability. The ministry's 表7-2 supplies
 115 route quotas even where no cutoff is readable. Gaps inside an active
@@ -17,7 +17,7 @@ from lib.paths import data_path, ranking_path
 QUOTA_PATHS = ("uac", "star", "apply", "tech")
 QUOTAS = "university-quotas.tsv"
 UAC_SEATS = "uac-seats.tsv"
-OUTPUT = "rank-history.tsv"
+OUTPUT = "ability-history.tsv"
 TOTALS = "admission-totals.tsv"
 COMPLETE_YEARS = {
     "uac": set(range(107, 116)),
@@ -307,7 +307,9 @@ def fill_ability_fallbacks(cells):
 
 
 def total_route(route):
-    return "star" if route in ("star", "star_eight") else route
+    if route in ("star", "star_eight"):
+        return "star"
+    return "tech_select" if route == "tech_apply" else route
 
 
 def calibrate_totals(cells, totals):
@@ -417,9 +419,9 @@ def write(rows, target=None):
 
 
 def main():
-    from rank import uac
+    from pool import ability
 
-    write(build(uac.build_rows()))
+    ability.main()
 
 
 if __name__ == "__main__":

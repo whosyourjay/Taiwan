@@ -1,15 +1,10 @@
-"""Read each exam's curve off the department ranking instead of fitting it.
+"""Tile admission seats into annual exam-to-cohort-ability curves.
 
-Every admit takes one seat, so walking the ranking from the best department down
-and adding up seats says where a department's admits sit in the admitted pool.
-Its published cutoff already says where its marginal admit sits among its own
-exam's takers. The two together are one point on that exam's curve, and the seat
-tables hold thousands of them.
-
-This needs no density to be fitted and nothing can slide along the axis, because
-the total seat count fixes the scale. What it needs instead is the ranking, and
-seats for every path — a path we hold no seats for leaves a gap that the rest of
-the tiling silently absorbs.
+Every admit occupies one place in the assessment pool. Walking a current annual
+ordering and accumulating route-scaled seats supplies one ability coordinate;
+the row's published cutoff supplies its coordinate inside its own exam. Pooling
+those points yields a monotone curve for each exam without a cross-route latent
+bridge or a separately generated department ranking.
 """
 
 import collections
@@ -21,19 +16,10 @@ import numpy as np
 from scipy import interpolate
 
 from lib import tsvio
-from lib.paths import data_path, path, ranking_path
-from pool import fit as pool_fit
-from rank import uac
+from lib.paths import data_path, path
 
-RANKING = "rank-departments.tsv"
-GROUPS = "rank-application-groups.tsv"
 TOTALS = "admission-totals.tsv"
 ASSESSMENT = "assessment-pool.tsv"
-
-# 分發 and 統測登記分發 publish a cutoff for every 系組, so each one can be placed
-# on its own. 繁星 and 個申 publish one cutoff per department, and splitting their
-# seats would scatter them along the axis under a bar that never moved.
-PER_GROUP = ("uac", "tech")
 
 # 四技二專甄選入學 is one path that the seat tables and the totals table spell
 # differently.
@@ -48,50 +34,11 @@ RESERVED_TOTALS = {"star_eight": "star"}
 KNOTS = 10
 
 
-def ranked(source=RANKING):
-    """Score for every ranked department, and a fallback score per school.
-
-    A department the ranking never scored sits at its school's average, which
-    is far closer than dropping it. Only the ordering matters here, and it is
-    stable enough that a department landing a little out of place moves nothing.
-    """
-    order, schools = {}, collections.defaultdict(list)
-    for row in tsvio.read_rows(ranking_path(source)):
-        uac.identify_department(row)
-        score = float(row["score"])
-        order[(row["school"], row["dept"])] = score
-        schools[row["school"]].append(score)
-    return order, {name: sum(got) / len(got) for name, got in schools.items()}
-
-
-def grouped(source=GROUPS):
-    """Score for each 系組 the ranking placed separately from its department."""
-    return {(row["school"], row["dept"], row["application_group"]): float(row["score"])
-            for row in tsvio.read_rows(ranking_path(source))}
-
-
 def admitted(year, totals=TOTALS):
     """How many seats each path really filled in `year`, from the totals table."""
     return {row["path"]: float(row["admitted"])
             for row in tsvio.read_rows(data_path(totals))
             if row["year"] == str(year)}
-
-
-def placed_rows(rows, order, schools, groups=None):
-    """Every row the tiling can place, as ``(row, ranking score, exam)``.
-
-    A seat occupies ability whether or not its bar can be read, so 繁星 belongs
-    here even though its cutoff is a rank inside one school.
-    """
-    groups = groups or {}
-    for row in rows:
-        exam = pool_fit.exam_of(row)
-        key = (row["school"], row["dept"])
-        score = order.get(key, schools.get(row["school"]))
-        if row["path"] in PER_GROUP:
-            score = groups.get((*key, row.get("application_group")), score)
-        if exam is not None and score is not None:
-            yield row, score, exam
 
 
 def path_scales(placed, filled):
@@ -118,16 +65,6 @@ def path_scales(placed, filled):
         total = filled.get(TOTAL_NAMES.get(path, path))
         total = max(total - reserved[path], 0.0) if total is not None else None
         out[path] = total / seats if total and seats else 1.0
-    return out
-
-
-def seats_in_order(rows, order, schools, groups=None, scales=None):
-    """Department-paths from the best down, each at the finest rank it has."""
-    scales = scales or {}
-    out = [(score, exam, pool_fit.top_of(row),
-            float(row["seats"]) * scales.get(row["path"], 1.0))
-           for row, score, exam in placed_rows(rows, order, schools, groups)]
-    out.sort(key=lambda item: -item[0])
     return out
 
 
@@ -313,20 +250,21 @@ def report(points, fitted, total, held):
 
 
 def main():
-    rows, _ = pool_fit.observations()
-    order, schools = ranked()
-    filled = admitted(pool_fit.YEAR)
-    groups = grouped()
-    scales = path_scales(placed_rows(rows, order, schools, groups), filled)
-    placed = seats_in_order(rows, order, schools, groups, scales)
+    from pool import ability
+    from pool import fit as pool_fit
+
+    rows = [row for row in ability.admission_rows()
+            if row["year"] == pool_fit.YEAR]
+    splines_by_exam, levels, _ = ability.fit_year(rows, pool_fit.YEAR)
+    placed = ability.placed_rows(rows, levels, pool_fit.YEAR)
     held = sum(seats for *_, seats in placed)
-    points, total = tile(placed, assessment_size(pool_fit.YEAR))
+    points, total = tile(placed, ability.assessment_size(pool_fit.YEAR))
     fitted = curves(points)
     report(points, fitted, total, held)
     shares, _ = seat_shares(placed)
     from pool.tiling_plot import draw
 
-    print(f"\nwrote {draw(points, fitted, splines(points), shares, total)}")
+    print(f"\nwrote {draw(points, fitted, splines_by_exam, shares, total)}")
 
 
 if __name__ == "__main__":

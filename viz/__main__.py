@@ -3,14 +3,13 @@
 import argparse
 import sys
 
-from viz import agreement, bridge, collected, relationships, spectrum
+from viz import agreement, bridge, collected, spectrum
 
 FIGURES = {
     "spectrum": spectrum,
     "agreement": agreement,
     "bridge": bridge,
     "collected": collected,
-    "relationships": relationships,
 }
 
 

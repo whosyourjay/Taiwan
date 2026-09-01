@@ -2,11 +2,11 @@
 """Generate English labels for every ranked school, department and group."""
 
 from lib.english import CACHE, english_names, load_cache
-from rank import uac
+from pool import ability
 
 
 def main():
-    rows = uac.build_rows()
+    rows = ability.admission_rows()
     names = {
         row[field]
         for row in rows

@@ -4,7 +4,6 @@ import random
 import unittest
 
 from rank import ceec_score
-from rank import uac
 from lib import tsvio
 from lib.paths import data_path
 
@@ -121,54 +120,6 @@ class TestAgainstPublishedBands(unittest.TestCase):
             self.assertEqual(int(score), level, f"{year} {subject} {name}")
             checked += 1
         self.assertGreater(checked, 20, "too few bands covered to be meaningful")
-
-
-class TestAbsolutePathsIgnoreTheSample(unittest.TestCase):
-    """A path scored against a national cohort must not be re-ranked locally.
-
-    Curving replaces the value with a position among the rows collected next to
-    it, so dropping unrelated schools would move a department that did not
-    change. Everything here is about that invariant.
-    """
-
-    def make_rows(self, extra=()):
-        base = [
-            {"year": "111", "path": "apply", "basis": 90.0, "seats": 10},
-            {"year": "111", "path": "apply", "basis": 60.0, "seats": 10},
-        ]
-        return base + [dict(r) for r in extra]
-
-    def curve_all(self, rows):
-        uac.curve([r for r in rows if r["path"] not in uac.ABSOLUTE],
-                       "basis", "pct", lambda r: (r["year"], r["path"]))
-        for row in rows:
-            if row["path"] in uac.ABSOLUTE:
-                row["pct"] = row["basis"]
-
-    def test_absolute_basis_passes_through_untouched(self):
-        rows = self.make_rows()
-        self.curve_all(rows)
-        self.assertEqual([r["pct"] for r in rows], [90.0, 60.0])
-
-    def test_adding_a_school_does_not_move_the_others(self):
-        alone = self.make_rows()
-        self.curve_all(alone)
-        together = self.make_rows(
-            [{"year": "111", "path": "apply", "basis": 99.0, "seats": 400}]
-        )
-        self.curve_all(together)
-        self.assertEqual([r["pct"] for r in together[:2]],
-                         [r["pct"] for r in alone])
-
-    def test_a_curved_path_does_move(self):
-        # The contrast the invariant is protecting against.
-        rows = [{"year": "111", "path": "tech", "basis": b, "seats": 10}
-                for b in (90.0, 60.0)]
-        self.curve_all(rows)
-        before = [r["pct"] for r in rows]
-        rows.append({"year": "111", "path": "tech", "basis": 99.0, "seats": 400})
-        self.curve_all(rows)
-        self.assertNotEqual([r["pct"] for r in rows[:2]], before)
 
 
 class TestInterpolateEnds(unittest.TestCase):

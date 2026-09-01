@@ -11,63 +11,6 @@ import numpy as np
 from pool import tiling
 
 
-class TestRanked(unittest.TestCase):
-    def rows(self):
-        return [
-            {"school": "A大學", "dept": "電機系", "score": "90"},
-            {"school": "A大學", "dept": "資工系", "score": "80"},
-            {"school": "B大學", "dept": "中文系", "score": "40"},
-        ]
-
-    def test_school_average_backs_up_an_unranked_department(self):
-        order = {(r["school"], r["dept"]): float(r["score"]) for r in self.rows()}
-        schools = {"A大學": 85.0, "B大學": 40.0}
-        placed = tiling.seats_in_order(
-            [{"school": "A大學", "dept": "沒排名系", "path": "uac",
-              "year": "110", "seats": 10, "ceec_percentile": 0.9}],
-            order, schools,
-        )
-        self.assertEqual(len(placed), 1)
-        self.assertAlmostEqual(placed[0][0], 85.0)
-
-    def row(self, path, group, seats=10):
-        return {"school": "A大學", "dept": "電機系", "path": path, "year": "110",
-                "seats": seats, "ceec_percentile": 0.9, "application_group": group}
-
-    def test_a_split_department_places_each_group_on_its_own_rank(self):
-        order = {("A大學", "電機系"): 90.0}
-        groups = {("A大學", "電機系", "電機系甲組"): 95.0,
-                  ("A大學", "電機系", "電機系乙組"): 70.0}
-        placed = tiling.seats_in_order(
-            [self.row("uac", "電機系甲組"), self.row("uac", "電機系乙組")],
-            order, {"A大學": 90.0}, groups,
-        )
-        self.assertEqual([score for score, *_ in placed], [95.0, 70.0])
-
-    def test_a_department_wide_bar_ignores_the_group_ranks(self):
-        groups = {("A大學", "電機系", "電機系甲組"): 95.0}
-        placed = tiling.seats_in_order(
-            [self.row("apply", "電機系甲組")], {("A大學", "電機系"): 90.0},
-            {"A大學": 90.0}, groups,
-        )
-        self.assertAlmostEqual(placed[0][0], 90.0)
-
-    def test_an_unscored_group_falls_back_to_its_department(self):
-        placed = tiling.seats_in_order(
-            [self.row("uac", "沒排名組")], {("A大學", "電機系"): 90.0},
-            {"A大學": 90.0}, {("A大學", "電機系", "電機系甲組"): 95.0},
-        )
-        self.assertAlmostEqual(placed[0][0], 90.0)
-
-    def test_a_department_of_an_unknown_school_is_dropped(self):
-        placed = tiling.seats_in_order(
-            [{"school": "沒聽過大學", "dept": "系", "path": "uac",
-              "year": "110", "seats": 10, "ceec_percentile": 0.9}],
-            {}, {},
-        )
-        self.assertEqual(placed, [])
-
-
 class TestTile(unittest.TestCase):
     def placed(self):
         # Best first: 20 seats, then 30 with no readable bar, then 50.

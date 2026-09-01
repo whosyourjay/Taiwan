@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-# Report generation may fit the small exam bridge. Keep native libraries from
+# Report generation rebuilds the representative 110 exam curves. Keep native libraries from
 # turning that one local operation into a many-core job.
 for variable in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
                  "VECLIB_MAXIMUM_THREADS"):
@@ -117,11 +117,12 @@ def entry_floor():
 
 
 def curves():
+    """Representative 110 exam curves for the cross-exam figure."""
     import numpy as np
 
     from pool import ability
 
-    _, splines = ability.curves()
+    _, splines = ability.curves("110")
     out = []
     for exam, spline in sorted(splines.items()):
         points = []

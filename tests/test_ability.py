@@ -35,10 +35,12 @@ class TestRead(unittest.TestCase):
     def test_繁星_with_neither_floor_is_skipped(self):
         self.assertEqual(ability.read([row("star", 40)], STRAIGHT), [])
 
-    def test_another_year_is_skipped(self):
+    def test_another_year_uses_its_supplied_curve(self):
         old = row("uac", 10, ceec_percentile=0.9)
         old["year"] = "109"
-        self.assertEqual(ability.read([old], STRAIGHT), [])
+        scored = ability.read([old], STRAIGHT)
+        self.assertEqual(len(scored), 1)
+        self.assertAlmostEqual(scored[0][2], 0.9)
 
     def test_an_exam_with_no_curve_is_skipped(self):
         scored = ability.read([row("uac", 10, ceec_percentile=0.9)],
@@ -310,6 +312,19 @@ class TestTable(unittest.TestCase):
         self.assertEqual([r["ability"] for r in got], [90.0, 40.0])
         merged = ability.table(scored, ("school", "dept"), EXAMS)
         self.assertAlmostEqual(merged[0]["ability"], 65.0)
+
+    def test_annual_table_retains_a_closed_university_without_a_direct_bar(self):
+        history = [{
+            "year": 108, "school": "停辦大學", "dept": "歷史學系",
+            "route": "uac", "seats": 20.0, "ability": 72.5,
+        }]
+        got = ability.annual_table(history, [], ("school",), EXAMS)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["school"], "停辦大學")
+        self.assertEqual(got[0]["last_year"], 108)
+        self.assertEqual(got[0]["years"], 1)
+        self.assertEqual(got[0]["ability"], 72.5)
+        self.assertEqual(got[0]["seats"], 20.0)
 
 
 class TestPoolRatio(unittest.TestCase):

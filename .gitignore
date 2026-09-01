@@ -2,13 +2,13 @@
 # come from the URLs in README.md.
 sources/
 
-# Built by modules under parse/ and by rank/uac.py.
+# Built by modules under parse/ and pool/ability.py.
 *.tsv
 !data/admission-totals.tsv
 !data/assessment-pool-inputs.tsv
 !data/name-english.tsv
 
-# Downloaded on demand by rank/gender.py.
+# Retained local cache from the retired auxiliary gender join.
 /rank/moe/
 
 # Built by modules under viz/ and by pool.plot.

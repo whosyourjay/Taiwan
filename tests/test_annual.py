@@ -14,6 +14,9 @@ def scored(year, seats, ability, route="uac", school="甲大學", dept="甲學�
 
 
 class TestAnnualPanel(unittest.TestCase):
+    def test_tech_application_rows_use_the_published_tech_select_total(self):
+        self.assertEqual(annual.total_route("tech_apply"), "tech_select")
+
     def test_missing_middle_year_is_interpolated(self):
         rows = [scored(108, 10, 20, "apply"), scored(110, 30, 40, "apply")]
         found = annual.build(rows, quotas=[], seat_rows=rows, totals=[], uac_seats=[])

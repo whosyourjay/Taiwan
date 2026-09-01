@@ -18,12 +18,34 @@ if __package__ in (None, ""):
 
 from parse import tcte
 from pool import bars, complement, factor, fit as pool_fit
-from rank import diagnose as production
 
 BUCKETS = ("zhikao",) + complement.VOCATIONAL + ("gsat", factor.RANK)
 NAMES = {"zhikao": "指考", "gsat": "學測", factor.RANK: "在校排名"}
 NAMES.update({pool: tcte.pool_label(pool) for pool in complement.VOCATIONAL})
 COLUMN = 11
+DEPTS_PER_SCHOOL = 5
+SCHOOLS = [
+    ("國立臺灣大學", "comprehensive flagship"),
+    ("國立陽明交通大學", "medical + comprehensive"),
+    ("臺北醫學大學", "medical"),
+    ("國立宜蘭大學", "dual system: 分發入學 + 統測"),
+    ("國立臺灣科技大學", "科技大學"),
+]
+
+
+def width(value):
+    """Display columns occupied by text, counting CJK as two."""
+    import unicodedata
+
+    return sum(2 if unicodedata.east_asian_width(char) in "WF" else 1
+               for char in value)
+
+
+def pad(value, size):
+    """Left-justify to display width, truncating if needed."""
+    while width(value) > size:
+        value = value[:-1]
+    return value + " " * (size - width(value))
 
 
 def deterministic(pool):
@@ -60,14 +82,14 @@ def table(title, sharp, noisy, found, school):
     if not depts:
         return
     print(f"\n{school}  ({title})")
-    head = production.pad("department", 24) + f"{'reading':>10}"
+    head = pad("department", 24) + f"{'reading':>10}"
     head += "".join(f"{NAMES[b]:>{COLUMN - 2}}" for b in BUCKETS) + f"{'spread':>9}"
     print("  " + head)
-    print("  " + "-" * production.width(head))
-    for group in depts[:production.DEPTS_PER_SCHOOL]:
+    print("  " + "-" * width(head))
+    for group in depts[:DEPTS_PER_SCHOOL]:
         for label, source in (("exact", sharp), ("noisy", noisy)):
             row = {b: source[group].get(b) for b in BUCKETS}
-            line = production.pad(group[2] if label == "exact" else "", 24)
+            line = pad(group[2] if label == "exact" else "", 24)
             line += f"{label:>10}" + "".join(cell(row[b]) for b in BUCKETS)
             gap = spread(row)
             line += cell(gap, 9) if gap is not None else f"{'':>9}"
@@ -104,13 +126,13 @@ def gate_lift(pool, found, limit=8):
         rows.append((100 * (with_gates - without), group, bar, 100 * with_gates))
     rows.sort(reverse=True)
     print(f"\nwhat the 檢定 gates add to a 繁星 rank bar, {len(rows)} departments")
-    head = production.pad("department", 30) + f"{'rank bar':>10}{'gates':>22}"
+    head = pad("department", 30) + f"{'rank bar':>10}{'gates':>22}"
     head += f"{'level':>8}{'gate lift':>11}"
     print("  " + head)
-    print("  " + "-" * production.width(head))
+    print("  " + "-" * width(head))
     for lift, group, bar, level in rows[:limit]:
         gates = " ".join(f"{100 * top:.0f}%" for top in bar.gates)
-        name = production.pad(f"{group[1]} {group[2]}", 30)
+        name = pad(f"{group[1]} {group[2]}", 30)
         rank = float(factor.rank_percentile(bar.score))
         print("  " + name + f"{rank:>9.1f}%" + f"{gates:>22}"
               + f"{level:>8.1f}{lift:>11.1f}")
@@ -132,7 +154,7 @@ def main():
     sharp = levels(deterministic(pool), found)
     summarise(sharp, noisy)
     print("\nwhere each path puts a department, exact bars against noisy ones")
-    for school, kind in production.SCHOOLS:
+    for school, kind in SCHOOLS:
         table(kind, sharp, noisy, found, school)
     gate_lift(pool, found)
 

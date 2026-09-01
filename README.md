@@ -3,7 +3,8 @@
 Ranks Taiwanese universities and departments by how hard they are to get into as
 a bachelor student. Nothing here reflects research output or reputation.
 
-Covers both admission systems, on one scale: 141 institutions, 3,040 departments.
+Covers both admission systems across 107–115: 150 institutions and 3,488
+departments in the current build.
 
 Known limitations and planned work live in `TODO.md`.
 
@@ -27,7 +28,7 @@ of the academic-track students also took 分科測驗.
 
 The two final-cutoff routes contain 48,394 named admissions in 114. 繁星 and the
 top-decile 個申 panel add rank evidence only where a row passes validation and
-matches a 分發 department. Every named seat still enters `rank-history.tsv`:
+matches a 分發 department. Every named seat still enters `ability-history.tsv`:
 missing ability is imputed, and annual MOE totals calibrate assignable gaps
 instead of limiting the ranking weight to rows with readable cutoffs.
 
@@ -40,16 +41,15 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 
 ## Outputs
 
-- `rankings/rank-universities.tsv` — 149 institutions under current names
-- `rankings/rank-departments.tsv` — 3,583 (institution, department) pairs
-- `rankings/rank-application-groups.tsv` — 4,934 raw 分發/聯登 系組 names before
-  department merging
-- `rankings/rank-history.tsv` — every 107–115 year × school × department × route,
-  with estimated seats and ability plus the method used for each value
-- `rankings/ability-universities.tsv` — final school scores under current names,
-  with predecessor names in `former_schools`
-- `rankings/ability-{departments,groups}.tsv` — the same ability scale below
-  school level, retaining each source year's school name
+- `rankings/ability-universities.tsv` — 150 final school scores under current
+  names, with predecessor names in `former_schools`; closed institutions remain
+  as rows with their historical `last_year`
+- `rankings/ability-departments.tsv` — 3,488 school × department scores from the
+  completed annual panel
+- `rankings/ability-groups.tsv` — 5,526 directly observed application-group
+  scores; annual seat sources do not identify groups below department level
+- `rankings/ability-history.tsv` — 54,434 year × school × department × route
+  cells for 107–115, with estimated seats and ability plus their methods
 - `rankings/ability-report.html` — a self-contained dark visual report with
   interactive seat, exam, route, program, high-school, and coverage figures
 - `figures/` — every generated figure, built by `python3 -m viz`
@@ -57,9 +57,10 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 - `data/high-school-entry-cutoffs.tsv` — high-school entry cutoffs by district
 - `data/cap-grade-distributions.tsv` — 107 national CAP A/B/C category counts
 
-Columns: `rank school school_en [dept dept_en [application_group
-application_group_en]] score years last_year seats_avg uac tech star star_eight apply men
-women pct_women`
+Summary columns are `rank school school_en [dept dept_en [application_group
+application_group_en]] ability seats years last_year spread` followed by the
+available exam readings. University rows also report `pool_seats` and
+`ability_pool_ratio`.
 
 `school_en`, `dept_en` and `application_group_en` use the local
 `data/name-english.tsv` cache. Ranking builds never contact a translation
@@ -68,11 +69,10 @@ service; `python3 translate_names.py` is the explicit, optional cache refresh.
 The ability tables' `years` column counts distinct source years. Their filled
 exam columns already show which exam readings contributed.
 
-`rank-history.tsv` retains the institution name used in that year under
+`ability-history.tsv` retains the institution name used in that year under
 `school_year_name` while `school` uses the current name. Its `ability` is the
-ranking's calibrated within-year difficulty percentile before multi-year
-aggregation; the separate `ability-*.tsv` tables place 110 thresholds on the
-age-cohort ability scale. `seats_method`, `seat_scale`, and `ability_method`
+year-specific cohort-ability percentile before multi-year aggregation.
+`seats_method`, `seat_scale`, and `ability_method`
 distinguish direct rows, MOE quotas, structural zeros, interpolation,
    nearest-year estimates, hierarchical fallbacks, and any national calibration.
 
@@ -120,15 +120,12 @@ classification, and retain only potential entrance evidence under `sources/`.
 It reached the whole directory for a couple of usable entrant distributions, so
 the cutoff tables above carry the school evidence instead.
 
-- `score` — 0-100 difficulty percentile among usable rows, combined across
-  paths by average annual admitted seats.
+- `ability` — 0-100 cohort-ability percentile, combined across annual route
+  cells by their completed seats.
 - `years` — number of distinct admission years represented by any covered path.
-- `seats_avg` — the sum of average annual seats in each collected admission path.
-- `uac`, `tech`, `star`, `star_eight`, `apply` — the entity's score within each
-  available path. `star_eight` is 第八類醫牙's pre-interview 繁星 screen.
-- `men`, `women`, `pct_women` — enrolled bachelor headcount, blank where 教育部
-  has no matching department and for every application group. See Auxiliary
-  gender join below.
+- `seats` — average annual completed seats across the entity's active years.
+- `gsat`, `zhikao`, `tongce_a`, `tongce_b`, `tongce_c`, `star`, and
+  `star_eight` — direct readings from the named exam or recommendation route.
 
 ## Method
 
@@ -164,27 +161,18 @@ the cutoff tables above carry the school evidence instead.
    their within-year `norm` position. 第八類醫牙 uses its final quota as its
    weight and stays a separate path.
 
-3. Convert the full-cutoff routes to seat-weighted midranks within `(year, path)`:
+3. Build each year's exam curves independently. A published threshold first
+   locates a row inside its own exam. Rows are ordered on the current ability
+   estimate, their named seats are scaled to the official annual route total,
+   and accumulating those seats inside the assessment cohort locates the same
+   row on the common ability axis. Seat-weighted isotonic curves map each exam
+   percentile to that axis; rereading the bars and retiling reaches a fixed
+   point. This uses no cross-route regression and no `rank-*` seed.
 
-    pct(r) = 100 * (seats below r + 0.5 * seats tied with r) / seats in G
-
-   Fit one weighted, missing-data component over matched department-years:
-
-    measurement = intercept_measurement + slope_type * component + residual
-
-   The measurements are 分發, 聯登, class rank, three 繁星 gate families, and
-   three 個申 subject families. Repeated gates within one family collapse to its
-   strictest bar. Each type has equal total weight; rows within a type keep seat
-   weights. Families share a slope within each path and keep separate
-   intercepts. Alternating least squares fits the component and all lines
-   together. A row then uses its own calibrated measurements. This keeps
-   distinct application-group cutoffs distinct in the output.
-
-   Fit only department-years that link at least two paths; one-path rows cannot
-   calibrate a relationship. Current fit: 37,755 observations across 9,700
-   department-years and nine measurements; R² .876. Leave universities out,
-   compare each held path with its companion paths, and get RMSE .546 component
-   standard deviations.
+   分發 and 聯登 are longitudinal final cutoffs. 個人申請 remains a first-stage
+   screen snapshot, and 繁星 combines its within-school rank with every binding
+   學測 gate against the high-school ability distribution. Those distinctions
+   remain visible in the per-exam columns and annual route rows.
 
 4. Complete the annual department-route panel before aggregation. Raw allocation
    rows supply seats even when their cutoff failed validation. MOE 表7-2 supplies
@@ -205,20 +193,16 @@ the cutoff tables above carry the school evidence instead.
 
    Thus a route with seats but no readable score contributes through an explicit
    ability estimate rather than disappearing from both numerator and denominator.
-Gender also does not affect `score`; `rank/gender.py` joins MOE bachelor counts on
-normalized department names and matches 2,500 of 3,583 rows.
-
 ## Ability pool
 
 `python3 -m pool.ability` scores every department by the ability its own
-thresholds imply, and is the live model. It reads each exam's curve off the
-ranking rather than fitting a density. Every admit takes one seat, so walking
-`rankings/rank-departments.tsv` from the best department down and adding up seats
-says where a department's admits sit in the pool. Its published cutoff already
-says where its marginal admit sits among its own exam's takers, and the two
-together are one point on that exam's curve. `pool/tiling.py` pools those points
-at each distinct bar, makes the result fall with isotonic regression, and fits a
-shape-preserving cubic through ten seat-weighted knots.
+thresholds imply, and is the live model. It fits 107–114 separately, then gives
+115's official seats explicit nearest-year or hierarchical ability estimates
+until final cutoffs exist. Every admit takes one seat: the annual ordering and
+cumulative seat count say where a row's margin sits in the assessment pool,
+while its published cutoff says where it sits among its own exam's takers.
+`pool/tiling.py` pools those points, makes each exam curve monotone with isotonic
+regression, and fits a shape-preserving cubic through ten seat-weighted knots.
 
 The axis runs over the distinct current students who sat 學測 or 統測 rather than
 over the seats in hand. `assessment-pool.tsv` estimates that union directly;
@@ -357,7 +341,6 @@ partial means we collected only named schools or districts.
 | Pool bridge | JCTV 四技日間部申請 first-stage report + rules | 107–114 | 4,704 joined program-years; one 112 row does not join |
 | Coverage audit | MOE annual admissions tables A1-17/A1-18 | 108–114 | Five route totals per year |
 | Seat completion | MOE 表7-2 approved department intake by route | 115 | 1,600+ department rows; parsed and reconciled to school totals |
-| Ranking labels | MOE university department student counts | 113 | Full file; gender columns only |
 | High-school model | MOE national CAP mark/category distributions | 107 | Full national distribution |
 | High-school model | Published CAP entry cutoffs | 107; 114 | Partial: 52 基北 schools; 157 schools in six districts |
 | High-school model | MOE high-school roll and graduate counts | 103–114 | 518–529 schools per year |
@@ -416,10 +399,6 @@ handbook, pages 16–17:
 基北區, 107 historical high-school cutoffs (third-party compilation):
 
     https://www.tkbgo.com.tw/schoolZone/university/article/toDetail?article_id=1905
-
-教育部統計處, 大專校院各校科系別學生數, for the gender columns:
-
-    https://stats.moe.gov.tw/files/detail/{year}/{year}_students.csv   # 110-113
 
 Downloaded inputs and auxiliary tables:
 
@@ -490,8 +469,7 @@ Run commands from the repository root. Install Python packages with
     python3 -m fetch.entry
     python3 -m parse.cap          # 107 CAP categories -> data/cap-grade-distributions.tsv
     python3 -m parse.entry        # 107 基北 cutoffs -> data/high-school-entry-cutoffs.tsv
-    python3 -m rank.uac        # all paths, bridge, gender -> rankings/rank-*.tsv
-    python3 -m pool.ability    # ability curves -> rankings/ability-*.tsv
+    python3 -m pool.ability    # 107–115 annual panel + rankings/ability-*.tsv
     python3 -m pool.tiling     # the curves themselves + the tiling figure
     python3 -m pool.coverage   # seats held against published intake, by path
     python3 -m pool.percentile 103 國英數社自 65   # one 學測 total, ranked
@@ -513,16 +491,14 @@ can be compacted at a 50% duty cycle with
 `python3 -m tools.compress_text_caches`; parsers read the resulting `.txt.gz`
 files directly.
 
-`rank/uac.py` pulls the 教育部 CSV through `rank/gender.py` on first run. Both
-group departments by the 系組 name normalisation in `lib/deptname.py`, and
-`rank/ceec_score.py` turns a 級分 bar into a share of that exam's takers.
+`rank/uac.py` normalizes source department names, and `rank/ceec_score.py` turns
+a 級分 bar into a share of that exam's takers. Neither module ranks entities.
 
-Off to the side, `rank/diagnose.py` prints path scores for a fixed department
-sample. `python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
+Off to the side, `python3 -m pool.fit` and `python3 -m pool.plot` fit and draw the experimental
 exam-population model, `pool/compare.py` ranks its candidates on held-out
 departments, and `pool/factor.py` adds a noise level per measurement, reading
 the bars `pool/bars.py` builds. `pool/diagnose.py` is to that fit what
-`rank/diagnose.py` is to the rankings.
+an error report is to the production rankings.
 
 `parse.apply` needs tesseract with traditional Chinese:
 

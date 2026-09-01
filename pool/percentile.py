@@ -19,11 +19,11 @@ from rank import ceec_score
 EXAM = "gsat"
 
 
-@functools.lru_cache(maxsize=1)
-def sources():
+@functools.lru_cache(maxsize=None)
+def sources(year):
     """學測 distributions and the exam curves, built once per process."""
     cohort = ceec_score.CohortPercentiles.load(data_path("ceec-scores.tsv"))
-    return cohort, ability.curves()[1]
+    return cohort, ability.curves(year)[1]
 
 
 def rank(year, label, score, loaded=None):
@@ -34,7 +34,7 @@ def rank(year, label, score, loaded=None):
     one of the combination totals published from 108. Returns ``(None, None)``
     when that year published no distribution for that subject set.
     """
-    cohort, splines = loaded or sources()
+    cohort, splines = loaded or sources(year)
     top = cohort.top_fraction(year, label, score)
     if top is None:
         return None, None

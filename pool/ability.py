@@ -1,9 +1,9 @@
 """Score every department by the ability its own thresholds imply.
 
-A threshold is a percentile inside one exam, and the tiling curves say what that
-is worth in ability. A department admitting through three exams therefore holds
-three readings of one margin, and its score is their seat-weighted average. Ranks
-build the curves and nothing else, so no rank survives into a score.
+A threshold is a percentile inside one exam, and annual seat tiling says what it
+is worth in cohort ability. A department admitting through three exams therefore
+holds three readings of its margins, and its score is their seat-weighted average.
+No separately generated rank or cross-route latent bridge enters the calculation.
 """
 
 import collections
@@ -14,7 +14,7 @@ if __package__ in (None, ""):
 import numpy as np
 from scipy.stats import norm
 
-from lib import schoolname, tsvio
+from lib import deptname, schoolname, tsvio
 from lib.english import english_names
 from lib.paths import ranking_path
 from pool import fit as pool_fit
@@ -33,19 +33,113 @@ REACH = 4.5
 # How tightly one 學測 subject tracks ability. The CAP subjects fit 0.897
 # against their own joint counts, and 學測 is the same kind of exam.
 SUBJECT_LOAD = 0.9
+YEARS = tuple(str(year) for year in range(107, 116))
+CURVE_ITERATIONS = 12
+CURVE_TOLERANCE = 1e-5
 
 
-def curves():
-    """The ability curves, bootstrapped from the first-pass ranking."""
-    rows, _ = pool_fit.observations()
-    order, schools = tiling.ranked()
-    filled = tiling.admitted(pool_fit.YEAR)
-    groups = tiling.grouped()
-    scales = tiling.path_scales(
-        tiling.placed_rows(rows, order, schools, groups), filled)
-    placed = tiling.seats_in_order(rows, order, schools, groups, scales)
-    points, _ = tiling.tile(placed, tiling.assessment_size(pool_fit.YEAR))
-    return rows, tiling.splines(points)
+def admission_rows():
+    """All raw threshold rows, without the legacy ranking bridge."""
+    rows, _, _ = pool_fit.source_rows()
+    pool_fit.attach_apply_tops(rows)
+    return rows
+
+
+def assessment_size(year):
+    """Annual assessment pool, scaling the measured 110 union by takers."""
+    exact = tiling.assessment_size(year)
+    if exact:
+        return exact
+    base = tiling.assessment_size(pool_fit.YEAR)
+    current = pool_fit.taker_counts(year)
+    reference = pool_fit.taker_counts(pool_fit.YEAR)
+    vocational = sum(current.get(f"tongce_{group}", 0.0) for group in "abc")
+    base_vocational = sum(reference[f"tongce_{group}"] for group in "abc")
+    if vocational:
+        share = base / (reference["gsat"] + base_vocational)
+        return share * (current["gsat"] + vocational)
+    return base * current["gsat"] / reference["gsat"]
+
+
+def initial_levels(rows):
+    """Start only from each bar's direction inside its own exam."""
+    return {id(row): 1.0 - top for row in rows
+            if (top := pool_fit.top_of(row)) is not None}
+
+
+def fallback_levels(rows, levels):
+    """Department and school means place rows without a direct margin."""
+    departments = collections.defaultdict(list)
+    schools = collections.defaultdict(list)
+    for row in rows:
+        if id(row) not in levels:
+            continue
+        value, seats = levels[id(row)], float(row["seats"])
+        departments[(row["school"], row["dept"])].append((value, seats))
+        schools[row["school"]].append((value, seats))
+    department = {key: weighted(values) for key, values in departments.items()}
+    school = {key: weighted(values) for key, values in schools.items()}
+    return department, school
+
+
+def weighted(values):
+    total = sum(weight for _, weight in values)
+    return sum(value * weight for value, weight in values) / total if total else None
+
+
+def placed_rows(rows, levels, year):
+    """Place one year's seats using only the ability model's current readings."""
+    departments, schools = fallback_levels(rows, levels)
+    raw = []
+    for row in rows:
+        exam = pool_fit.exam_of(row)
+        key = row["school"], row["dept"]
+        score = levels.get(id(row), departments.get(key, schools.get(row["school"])))
+        if exam is not None and score is not None:
+            raw.append((row, score, exam))
+    scales = tiling.path_scales(raw, tiling.admitted(year))
+    placed = [(score, exam, pool_fit.top_of(row),
+               float(row["seats"]) * scales.get(row["path"], 1.0))
+              for row, score, exam in raw]
+    return sorted(placed, key=lambda item: -item[0])
+
+
+def direct_levels(rows, splines):
+    """Read final-cutoff and screen bars through their own exam curve."""
+    out = {}
+    for row in rows:
+        exam, top = pool_fit.exam_of(row), pool_fit.top_of(row)
+        if exam in splines and top is not None:
+            out[id(row)] = held(splines[exam], 1.0 - top)
+    return out
+
+
+def fit_year(rows, year, iterations=CURVE_ITERATIONS):
+    """Alternate seat ordering and exam curves to a self-contained fixed point."""
+    levels = initial_levels(rows)
+    if not levels:
+        return {}, levels, 0
+    for iteration in range(1, iterations + 1):
+        placed = placed_rows(rows, levels, year)
+        points, _ = tiling.tile(placed, assessment_size(year))
+        splines = tiling.splines(points)
+        updated = direct_levels(rows, splines)
+        common = set(levels) & set(updated)
+        difference = max((abs(updated[key] - levels[key]) for key in common),
+                         default=0.0)
+        levels = updated
+        if difference < CURVE_TOLERANCE:
+            break
+    placed = placed_rows(rows, levels, year)
+    points, _ = tiling.tile(placed, assessment_size(year))
+    return tiling.splines(points), levels, iteration
+
+
+def curves(year=pool_fit.YEAR):
+    """One year's ability curves, independent of legacy rank files."""
+    rows = [row for row in admission_rows() if row["year"] == str(year)]
+    splines, _, _ = fit_year(rows, str(year))
+    return rows, splines
 
 
 def held(spline, bottom):
@@ -284,6 +378,36 @@ def read(rows, splines, means=None, cohort=None, sitting=None):
             for row in rows for exam, level in levels(row, splines, swept)]
 
 
+def longitudinal(years=YEARS):
+    """Score every available year through a separately fitted ability curve."""
+    source = admission_rows()
+    scored, fitted = [], {}
+    for year in years:
+        rows = [row for row in source if row["year"] == year]
+        splines, _, iterations = fit_year(rows, year)
+        if not splines:
+            print(f"{year}: no readable final-cutoff curve; annual panel will impute")
+            continue
+        cohort = assessment_size(year)
+        found = read(rows, splines, cohort=cohort,
+                     sitting=cohort / high_school.cap_takers())
+        scored.extend(found)
+        fitted[year] = splines
+        print(f"{year}: {len(found):,} threshold readings, {len(splines)} exams, "
+              f"{iterations} iterations")
+    return source, scored, fitted
+
+
+def history_inputs(scored):
+    """Rows carrying cohort ability for annual seat completion."""
+    out = []
+    for row, _, level, seats in scored:
+        found = dict(row)
+        found["score"], found["seats"] = 100.0 * level, seats
+        out.append(found)
+    return out
+
+
 def current_key(row, columns):
     """Output key, merging predecessor institutions only at school level."""
     values = tuple(row[column] for column in columns)
@@ -346,6 +470,53 @@ def table(scored, columns, exams, english=None):
     return out
 
 
+def normalized_scored(scored):
+    """Use the annual panel's institution and department identities."""
+    out = []
+    for row, exam, level, seats in scored:
+        found = dict(row)
+        found["school"] = schoolname.without_campus(schoolname.current(row["school"]))
+        found["dept"] = deptname.normalize(row["dept"])
+        out.append((found, exam, level, seats))
+    return out
+
+
+def annual_table(history, scored, columns, exams, english=None):
+    """Aggregate completed annual ability while retaining direct exam readings."""
+    from rank import annual
+
+    english = english or {}
+    direct = table(normalized_scored(scored), columns, exams, english)
+    direct = {tuple(row[column] for column in columns): row for row in direct}
+    out = []
+    for aggregate in annual.aggregate(history, columns):
+        key = aggregate["key"]
+        key = key if isinstance(key, tuple) else (key,)
+        readings = direct.get(key, {})
+        row = {"rank": 0}
+        for column, value in zip(columns, key):
+            row[column] = value
+            row[f"{column}_en"] = (school_english(value, english)
+                                    if column == "school"
+                                    else english.get(value, ""))
+        if columns == ("school",):
+            former = schoolname.FORMER.get(row["school"], ())
+            row["former_schools"] = " | ".join(former)
+            row["former_schools_en"] = " | ".join(
+                school_english(name, english) for name in former)
+        row["ability"] = round(aggregate["score"], 2)
+        row["seats"] = round(aggregate["seats_avg"], 1)
+        row["years"], row["last_year"] = aggregate["years"], aggregate["last_year"]
+        row["spread"] = readings.get("spread", "")
+        for exam in exams:
+            row[exam] = readings.get(exam, "")
+        out.append(row)
+    out.sort(key=lambda row: -row["ability"])
+    for rank, row in enumerate(out, 1):
+        row["rank"] = rank
+    return out
+
+
 def disagreement(scored, exams):
     """Seat-weighted gap between the exams scoring one department, by decile."""
     moment, weight, _ = collect(scored, ("school", "dept"))
@@ -369,23 +540,14 @@ def disagreement(scored, exams):
 
 
 def pool_sizes(rows):
-    """Estimated annual seats by school and the cohort that holds them.
+    """Average annual completed seats by school and assessment-pool size."""
+    from rank import annual
 
-    These are the same path-scaled seats and assessment denominator used to build
-    the exam-to-ability curves. The ranking table's ordinary `seats` column
-    remains the observed sample.
-    """
-    order, schools = tiling.ranked()
-    groups = tiling.grouped()
-    filled = tiling.admitted(pool_fit.YEAR)
-    placed = list(tiling.placed_rows(rows, order, schools, groups))
-    scales = tiling.path_scales(placed, filled)
-    seats = collections.defaultdict(float)
-    for row, _, _ in placed:
-        school = schoolname.current(row["school"])
-        seats[school] += (float(row["seats"])
-                          * scales.get(row["path"], 1.0))
-    return seats, tiling.assessment_size(pool_fit.YEAR)
+    aggregates = annual.aggregate(rows, ("school",))
+    seats = {row["key"]: row["seats_avg"] for row in aggregates}
+    years = sorted({str(row["year"]) for row in rows})
+    cohorts = [assessment_size(year) for year in years]
+    return seats, sum(cohorts) / len(cohorts) if cohorts else 0.0
 
 
 def add_pool_ratios(rows, seats, cohort):
@@ -424,17 +586,23 @@ def report(scored, exams, rows):
 
 
 def main():
-    rows, splines = curves()
-    scored = read(rows, splines)
+    from rank import annual
+
+    rows, scored, _ = longitudinal()
+    history = annual.build(history_inputs(scored))
+    annual.write(history, ranking_path("ability-history.tsv"))
     names = {row[field] for row, _, _, _ in scored
              for field in ("school", "dept", "application_group") if row.get(field)}
+    names |= {row[field] for row in history for field in ("school", "dept")}
     english = english_names(names)
     exams = sorted({exam for _, exam, _, _ in scored})
     report(scored, exams, rows)
-    seats, cohort = pool_sizes(rows)
+    seats, cohort = pool_sizes(history)
     print()
     for name, columns in LEVELS:
-        found = table(scored, columns, exams, english)
+        found = (table(scored, columns, exams, english)
+                 if columns == ("school", "dept", "application_group")
+                 else annual_table(history, scored, columns, exams, english))
         if columns == ("school",):
             add_pool_ratios(found, seats, cohort)
         written = tsvio.write_rows(ranking_path(name), found)

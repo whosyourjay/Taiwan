@@ -123,7 +123,7 @@ class TestMatched(unittest.TestCase):
 
 
 class TestTechApplyRows(unittest.TestCase):
-    def test_loads_binding_110_gsat_screen_only(self):
+    def test_loads_binding_gsat_screens_in_every_available_year(self):
         rows = [
             {
                 "year": "110", "school": "A", "dept": "工程系甲組",
@@ -142,11 +142,13 @@ class TestTechApplyRows(unittest.TestCase):
         distributions.gsat_percentile.side_effect = [0.75, 0.01, 0.75]
         with mock.patch.object(pool_fit.tsvio, "read_rows", return_value=rows):
             got = pool_fit.load_tech_apply(distributions)
-        self.assertEqual(len(got), 1)
-        self.assertEqual(got[0]["path"], "tech_apply")
-        self.assertEqual(got[0]["dept"], "工程系")
-        self.assertEqual(got[0]["seats"], 20)
-        self.assertAlmostEqual(pool_fit.top_of(got[0]), 0.25)
+        self.assertEqual(len(got), 2)
+        by_year = {row["year"]: row for row in got}
+        self.assertEqual(set(by_year), {"109", "110"})
+        self.assertEqual(by_year["110"]["path"], "tech_apply")
+        self.assertEqual(by_year["110"]["dept"], "工程系")
+        self.assertEqual(by_year["110"]["seats"], 20)
+        self.assertAlmostEqual(pool_fit.top_of(by_year["109"]), 0.25)
 
 
 class TestFit(unittest.TestCase):
@@ -353,8 +355,9 @@ class TestVocationalPools(unittest.TestCase):
         self.assertEqual(pool_fit.exam_of(self.row(group="電機與電子群資電類")),
                          pool_fit.exam_of(self.row(group="電機與電子群電機類")))
 
-    def test_another_year_carries_no_bar(self):
-        self.assertIsNone(pool_fit.exam_of(self.row(year="109")))
+    def test_the_same_group_uses_the_same_pool_in_another_year(self):
+        self.assertEqual(pool_fit.exam_of(self.row(year="109")),
+                         pool_fit.exam_of(self.row()))
 
     def test_the_academic_paths_still_name_their_exam(self):
         for path, exam in (("uac", "zhikao"), ("star", "gsat"),

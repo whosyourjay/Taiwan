@@ -1,8 +1,7 @@
-"""Which year-and-path cells the repository actually holds bars for.
+"""Which annual path cells supply direct bars to the longitudinal model.
 
-The ability model runs on one year because only one year has every path. This
-says which cell to collect next, and how much of each path's published intake the
-bars in hand already cover.
+This distinguishes direct threshold evidence from the annual panel's explicit
+seat and ability imputations, and shows how much published intake the bars cover.
 """
 
 import collections
