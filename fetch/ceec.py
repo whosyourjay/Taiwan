@@ -13,6 +13,9 @@ INDEXES = {
     "zhikao": "0J018611000723433352",  # 分科測驗(110前指考) 統計資料
 }
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+# Attachments the site hangs on every page. Some years name their statistics
+# files without the report number, so the leading digit cannot be the test.
+BOILERPLATE = re.compile(r"常見問題|資通安全政策聲明")
 
 
 def get(url):
@@ -46,8 +49,7 @@ def data_links(page_url):
         if not link.startswith("http"):
             link = BASE + link
         name = urllib.parse.unquote(link.rsplit("/", 1)[-1])
-        # Skip site-wide boilerplate attachments that appear in the page chrome.
-        if re.match(r"^\d", name) and link not in out:
+        if not BOILERPLATE.search(name) and link not in out:
             out.append(link)
     return out
 
@@ -70,10 +72,10 @@ def main(refresh=False):
         for page_url, title in year_pages(index_id).items():
             year = re.match(r"(\d+)", title)
             year = year.group(1) if year else "unknown"
-            for i, link in enumerate(data_links(page_url)):
+            for link in data_links(page_url):
                 name = urllib.parse.unquote(link.rsplit("/", 1)[-1])
                 name = re.sub(r"[^\w.一-鿿-]", "_", name)[-80:]
-                target = os.path.join(outdir, f"{year}-{i:02d}-{name}")
+                target = os.path.join(outdir, f"{year}-{name}")
                 if os.path.exists(target):
                     continue
                 try:

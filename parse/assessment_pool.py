@@ -13,7 +13,7 @@ from parse.uac import pdf_text
 
 YEAR = "2021"
 TONGCE = "tech/tcte-110-work-report.pdf"
-GSAT = "ceec/xuece/110-00-11*"
+GSAT = "ceec/xuece/110-11_報名人數統計總表*"
 
 def as_int(value):
     return int(float(str(value).replace(",", "")))
