@@ -4,6 +4,8 @@ These counts include seats returned by earlier admission routes, so they are
 the final UAC capacity rather than the ministry's initial route allocation.
 """
 
+import glob
+import os
 import re
 import sys
 
@@ -13,10 +15,14 @@ from lib import tsvio
 from lib.paths import data_path, source_path
 
 
-SOURCE = "uac/115-count.xlsx"
+SOURCE_PATTERN = "uac/*-count.xlsx"
 OUTPUT = "uac-seats.tsv"
-YEAR = "115"
-HEADERS = ("序號", "學校名稱", "學系組名稱", "系組代碼", "回流後分發入學總名額")
+HEADER_ALIASES = {
+    "school": ("學校名稱",),
+    "dept": ("學系組名稱",),
+    "code": ("系組代碼", "校系代碼"),
+    "seats": ("回流後分發入學總名額", "回流後考試分發總名額"),
+}
 
 
 def clean(value):
@@ -30,15 +36,28 @@ def code_of(value):
     return value.zfill(4) if value.isdigit() else value
 
 
-def rows(source, year=YEAR):
+def header_indices(values):
+    headers = [clean(value) for value in values]
+    indices = {}
+    for field, aliases in HEADER_ALIASES.items():
+        found = [headers.index(alias) for alias in aliases if alias in headers]
+        if len(found) != 1:
+            raise ValueError(f"unexpected UAC seat headers: {tuple(headers)}")
+        indices[field] = found[0]
+    return indices
+
+
+def rows(source, year):
     """Return coded program rows and the workbook's published grand total."""
     book = openpyxl.load_workbook(source, read_only=True, data_only=True)
     values = book.worksheets[0].iter_rows(values_only=True)
-    headers = tuple(clean(value) for value in next(values))
-    if headers != HEADERS:
-        raise ValueError(f"unexpected UAC seat headers: {headers}")
+    columns = header_indices(next(values))
     found, published = [], None
-    for _, school, dept, code, seats in values:
+    for values in values:
+        school = values[columns["school"]]
+        dept = values[columns["dept"]]
+        code = values[columns["code"]]
+        seats = values[columns["seats"]]
         code = code_of(code)
         if code:
             found.append({
@@ -66,12 +85,21 @@ def checked(found, published):
     return found
 
 
+def source_files():
+    return sorted(glob.glob(source_path(SOURCE_PATTERN)))
+
+
 def main(out_path=None):
-    found = checked(*rows(source_path(SOURCE)))
+    found = []
+    for source in source_files():
+        year = os.path.basename(source).split("-", 1)[0]
+        annual = checked(*rows(source, year))
+        print(f"{year}: {len(annual)} programs, "
+              f"{sum(row['seats'] for row in annual):,} seats", file=sys.stderr)
+        found.extend(annual)
     target = out_path or data_path(OUTPUT)
     written = tsvio.write_rows(target, found)
-    print(f"wrote {written} rows ({sum(row['seats'] for row in found):,} seats) "
-          f"to {target}", file=sys.stderr)
+    print(f"wrote {written} rows to {target}", file=sys.stderr)
 
 
 if __name__ == "__main__":

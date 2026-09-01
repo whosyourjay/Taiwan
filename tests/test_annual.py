@@ -99,6 +99,17 @@ class TestAnnualPanel(unittest.TestCase):
         self.assertEqual(current["uac"]["seats_method"], "uac_post_return")
         self.assertIn("uac_return_estimate", current["apply"]["seats_method"])
 
+    def test_capacity_does_not_replace_completed_year_admissions(self):
+        rows = [scored(114, 20, 90)]
+        capacity = [{
+            "year": "114", "school": "甲大學", "dept": "甲學系", "seats": "30",
+        }]
+        found = annual.build(rows, quotas=[], seat_rows=rows, totals=[],
+                             uac_seats=capacity)
+        current = next(row for row in found if row["year"] == 114)
+        self.assertEqual(current["seats"], 20.0)
+        self.assertEqual(current["seats_method"], "observed")
+
     def test_interpolation_stays_on_the_line(self):
         rng = random.Random(20260901)
         for _ in range(100):

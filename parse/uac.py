@@ -119,12 +119,33 @@ def parse(pdf, year):
     return rows
 
 
+def official_names(source=None):
+    """Program names keyed by year and code from UAC's annual workbooks."""
+    source = source or data_path("uac-seats.tsv")
+    if not os.path.exists(source):
+        return {}
+    return {(row["year"], row["code"]): (row["school"], row["dept"])
+            for row in tsvio.read_rows(source)}
+
+
+def repair_names(rows, names):
+    """Replace abbreviated PDF labels with the workbook's official labels."""
+    repaired = 0
+    for row in rows:
+        name = names.get((row["year"], row["code"]))
+        if name and (row["school"], row["dept"]) != name:
+            row["school"], row["dept"] = name
+            repaired += 1
+    return repaired
+
+
 def main(out_path):
-    rows = []
+    rows, names = [], official_names()
     for pdf in sorted(glob.glob(source_path("uac", "*-cutoffs.pdf"))):
         year = os.path.basename(pdf).split("-")[0]
         got = parse(pdf, year)
-        print(f"{year}: {len(got)} 系組", file=sys.stderr)
+        repaired = repair_names(got, names)
+        print(f"{year}: {len(got)} 系組, {repaired} names expanded", file=sys.stderr)
         rows.extend(got)
     written = tsvio.write_rows(out_path, rows)
     print(f"wrote {written} rows to {out_path}", file=sys.stderr)

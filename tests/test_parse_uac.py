@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from lib.paths import data_path
-from parse.uac import ART_MAX, max_score, pdf_text
+from parse.uac import ART_MAX, max_score, pdf_text, repair_names
 
 
 class TestMaxScore(unittest.TestCase):
@@ -40,6 +40,19 @@ class TestPdfTextCache(unittest.TestCase):
                            encoding="utf-8") as handle:
                 handle.write("招生資料")
             self.assertEqual(pdf_text(str(pdf)), "招生資料")
+
+
+class TestOfficialNames(unittest.TestCase):
+    def test_workbook_expands_an_abbreviated_pdf_department(self):
+        rows = [{
+            "year": "107", "code": "0110", "school": "國立臺灣師範大學",
+            "dept": "人發與家庭系家庭生活教育組",
+        }]
+        names = {("107", "0110"): (
+            "國立臺灣師範大學", "人類發展與家庭學系家庭生活教育組",
+        )}
+        self.assertEqual(repair_names(rows, names), 1)
+        self.assertEqual(rows[0]["dept"], "人類發展與家庭學系家庭生活教育組")
 
 
 if __name__ == "__main__":

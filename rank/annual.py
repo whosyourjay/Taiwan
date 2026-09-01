@@ -185,7 +185,7 @@ def deduct_returns(cells, entity, year, returned):
 
 
 def add_uac_seats(cells, labels, year_names, rows):
-    """Override initial UAC allocations with UAC's post-return capacity."""
+    """Use capacity only where a completed year's actual admissions are absent."""
     totals, counts = collections.Counter(), collections.Counter()
     for row in rows:
         entity, year = entity_of(row), int(row["year"])
@@ -195,11 +195,15 @@ def add_uac_seats(cells, labels, year_names, rows):
             (year, float(row.get("seats") or 0), deptname.normalize(row["dept"]))
         )
         year_names[(entity, year)].add(row["school"])
-    years = {year for _, year in totals}
+    actual_years = {year for (_, year, route), cell in cells.items()
+                    if route == "uac" and cell["seats_method"] == "observed"}
+    years = {year for _, year in totals} - actual_years
     for (entity, year, route), cell in cells.items():
         if route == "uac" and year in years and (entity, year) not in totals:
             cell["seats"], cell["seats_method"] = 0.0, "uac_post_return"
     for (entity, year), seats in totals.items():
+        if year not in years:
+            continue
         key = entity, year, "uac"
         cell = cells.setdefault(key, {
             "entity": entity, "year": year, "route": "uac",
