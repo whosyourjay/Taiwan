@@ -802,8 +802,12 @@ def build_rows(with_models=False):
 
 
 def main():
+    from rank import annual
+
     os.makedirs(ranking_path(), exist_ok=True)
     rows = build_rows()
+    history = annual.build(rows)
+    annual.write(history)
     uac_rows = [r for r in rows if r["path"] == "uac"]
     tech_rows = [r for r in rows if r["path"] == "tech"]
     tail = ["score", "years", "last_year", "seats_avg"] + list(PATHS)
@@ -812,18 +816,19 @@ def main():
     by_school_counts = gender.school_totals(by_dept_counts)
     names = {row[field] for row in rows
              for field in ("school", "dept", "application_group") if row.get(field)}
+    names |= {row[field] for row in history for field in ("school", "dept")}
     english = english_names(names)
     write(
         ranking_path("rank-universities.tsv"),
         ["rank", "school", "school_en"] + tail,
-        aggregate(rows, lambda r: r["school"]),
+        annual.aggregate(history, ("school",)),
         lambda school: by_school_counts.get(school),
         english,
     )
     write(
         ranking_path("rank-departments.tsv"),
         ["rank", "school", "school_en", "dept", "dept_en"] + tail,
-        aggregate(rows, lambda r: (r["school"], r["dept"])),
+        annual.aggregate(history, ("school", "dept")),
         lambda key: gender.lookup(by_dept_counts, *key),
         english,
     )

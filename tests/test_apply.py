@@ -2,7 +2,7 @@
 
 import unittest
 
-from parse.apply import refresh_names, snap
+from parse.apply import refresh_names, repair_code_names, snap
 
 
 class TestSnap(unittest.TestCase):
@@ -22,6 +22,15 @@ class TestSnap(unittest.TestCase):
         )
         self.assertEqual((changed, missing), (1, 0))
         self.assertEqual(rows[0]["dept"], "環境與食品安全檢驗學士學位學程")
+
+    def test_same_year_program_code_overrides_a_wrong_ocr_name(self):
+        rows = [{
+            "year": "110", "college_code": "001", "dept_code": "001202",
+            "dept": "社會舉銷",
+        }]
+        names = {("110", "001", "00120"): "國際企業學系"}
+        self.assertEqual(repair_code_names(rows, names), 1)
+        self.assertEqual(rows[0]["dept"], "國際企業學系")
 
 
 if __name__ == "__main__":

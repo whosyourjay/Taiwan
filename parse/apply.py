@@ -361,8 +361,24 @@ def load_code_names():
     source = data_path("star-cutoffs.tsv")
     if not os.path.exists(source):
         return {}
-    return {(row["year"], row["college_code"], row["dept_code"]): row["dept"]
-            for row in tsvio.read_rows(source)}
+    out = {}
+    for row in tsvio.read_rows(source):
+        if "【外加】" in row["dept"]:
+            continue
+        out[(row["year"], row["college_code"], row["dept_code"])] = row["dept"]
+    return out
+
+
+def repair_code_names(rows, code_names):
+    """Replace cached OCR names with the exact same-year CAC program name."""
+    changed = 0
+    for row in rows:
+        key = (row["year"], row["college_code"], row["dept_code"][:5])
+        name = code_names.get(key)
+        if name and name != row["dept"]:
+            row["dept"] = name
+            changed += 1
+    return changed
 
 
 def name_cells(source):
@@ -493,6 +509,11 @@ def main(out_path, selected, refresh=False, audit=False):
         load_colleges(), load_names(), load_code_names(), fill_rates()
     )
     rows = list(tsvio.read_rows(out_path)) if os.path.exists(out_path) else []
+    repaired = repair_code_names(rows, code_names)
+    if repaired:
+        tsvio.write_rows(out_path, rows)
+        print(f"repaired {repaired} cached names from CAC program codes",
+              file=sys.stderr)
     if audit:
         audit_sources(selected, rows, colleges, names, code_names, fills)
         return

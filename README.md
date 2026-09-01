@@ -27,8 +27,9 @@ of the academic-track students also took 分科測驗.
 
 The two final-cutoff routes contain 48,394 named admissions in 114. 繁星 and the
 top-decile 個申 panel add rank evidence only where a row passes validation and
-matches a 分發 department. `data/admission-totals.tsv` audits missing coverage; those
-counts do not affect `score` yet.
+matches a 分發 department. Every named seat still enters `rank-history.tsv`:
+missing ability is imputed, and annual MOE totals calibrate assignable gaps
+instead of limiting the ranking weight to rows with readable cutoffs.
 
 National counts are actual admissions from the annual MOE Education Statistics
 tables A1-17/A1-18; the [current edition is here](https://stats.moe.gov.tw/files/ebook/Education_Statistics/115/115edu_EXCEL.htm).
@@ -39,10 +40,12 @@ and [技專校院招生策略委員會](https://www.techadmi.edu.tw/edutype.php?
 
 ## Outputs
 
-- `rankings/rank-universities.tsv` — 141 institutions (122 still admitting in 114)
-- `rankings/rank-departments.tsv` — 3,040 (institution, department) pairs
-- `rankings/rank-application-groups.tsv` — 4,489 raw 分發/聯登 系組 names before
+- `rankings/rank-universities.tsv` — 149 institutions under current names
+- `rankings/rank-departments.tsv` — 3,583 (institution, department) pairs
+- `rankings/rank-application-groups.tsv` — 4,934 raw 分發/聯登 系組 names before
   department merging
+- `rankings/rank-history.tsv` — every 107–115 year × school × department × route,
+  with estimated seats and ability plus the method used for each value
 - `rankings/ability-universities.tsv` — final school scores under current names,
   with predecessor names in `former_schools`
 - `rankings/ability-{departments,groups}.tsv` — the same ability scale below
@@ -64,6 +67,14 @@ service; `python3 translate_names.py` is the explicit, optional cache refresh.
 
 The ability tables' `years` column counts distinct source years. Their filled
 exam columns already show which exam readings contributed.
+
+`rank-history.tsv` retains the institution name used in that year under
+`school_year_name` while `school` uses the current name. Its `ability` is the
+ranking's calibrated within-year difficulty percentile before multi-year
+aggregation; the separate `ability-*.tsv` tables place 110 thresholds on the
+age-cohort ability scale. `seats_method`, `seat_scale`, and `ability_method`
+distinguish direct rows, MOE quotas, structural zeros, interpolation,
+   nearest-year estimates, hierarchical fallbacks, and any national calibration.
 
 `data/high-school-destinations.tsv` uses the columns `year high_school destination
 destination_type students reporting_floor graduates source_date`. Filter
@@ -170,24 +181,29 @@ the cutoff tables above carry the school evidence instead.
    distinct application-group cutoffs distinct in the output.
 
    Fit only department-years that link at least two paths; one-path rows cannot
-   calibrate a relationship. Current fit: 7,732 observations across 1,902
-   department-years and nine measurements; R² .872. Leave universities out,
-   compare each held path with its companion paths, and get RMSE .480 component
+   calibrate a relationship. Current fit: 37,755 observations across 9,700
+   department-years and nine measurements; R² .876. Leave universities out,
+   compare each held path with its companion paths, and get RMSE .546 component
    standard deviations.
 
-4. Aggregate each entity within path, then across paths:
+4. Complete the annual department-route panel before aggregation. Raw allocation
+   rows supply seats even when their cutoff failed validation. MOE 表7-2 supplies
+   exact 115 quotas. A missing row in a complete source is zero; a gap in partial
+   coverage is interpolated between the same department-route's surrounding
+   years or carried from its nearest year. Ability uses the same series first,
+   then department, school, route-year, and national fallbacks. Finally, published
+   route totals calibrate the imputed cells where the panel has candidate
+   departments for the residual; otherwise the national gap stays unassigned
+   rather than altering a published department count. Every factor is retained
+   in the output.
 
-    path_score_j = sum(seats_r * score_r) / sum(seats_r)
-    annual_seats_j = sum(seats_r) / number_of_years_j
-    score_e = sum(annual_seats_j * path_score_j) / sum(annual_seats_j)
+    score_e = sum(year_route_seats * year_route_ability) / sum(year_route_seats)
+    seats_avg_e = sum(year_route_seats) / number_of_active_years
 
-   `seats_avg` is `sum(annual_seats_j)`. Years weight rows within a path, not the
-   path itself.
-
-`data/admission-totals.tsv` reports unscored coverage gaps here; the ranking's
-denominator is the seats it holds. The ability pool below does use those totals.
+   Thus a route with seats but no readable score contributes through an explicit
+   ability estimate rather than disappearing from both numerator and denominator.
 Gender also does not affect `score`; `rank/gender.py` joins MOE bachelor counts on
-normalized department names and matches 2,407 of 3,040 rows.
+normalized department names and matches 2,500 of 3,583 rows.
 
 ## Ability pool
 
@@ -337,6 +353,7 @@ partial means we collected only named schools or districts.
 | Ranking and pool | TCTE 統測 score distributions, report B2 | 108–114 | Full published subject tables |
 | Pool bridge | JCTV 四技日間部申請 first-stage report + rules | 107–114 | 4,704 joined program-years; one 112 row does not join |
 | Coverage audit | MOE annual admissions tables A1-17/A1-18 | 108–114 | Five route totals per year |
+| Seat completion | MOE 表7-2 approved department intake by route | 115 | 1,600+ department rows; parsed and reconciled to school totals |
 | Ranking labels | MOE university department student counts | 113 | Full file; gender columns only |
 | High-school model | MOE national CAP mark/category distributions | 107 | Full national distribution |
 | High-school model | Published CAP entry cutoffs | 107; 114 | Partial: 52 基北 schools; 157 schools in six districts |
@@ -407,7 +424,9 @@ Downloaded inputs and auxiliary tables:
   gzip-compressed `pdftotext -layout` dump each parser caches on first run.
 - `data/admission-totals.tsv` — actual 108–114 admissions from the annual MOE
   Education Statistics tables A1-17 (editions 109–114) and A1-18 (edition 115).
-  The ranking command reports gaps against these counts; they do not affect scores.
+  The ranking command reports gaps and uses the totals to calibrate annual seat estimates.
+- `sources/moe/moe-115-quota.pdf` — MOE 表7-2 department intake split by route;
+  `data/university-quotas.tsv` is the reconciled 115 allocation table.
 - `sources/star/` — 繁星推薦 錄取標準, and `data/star-cutoffs.tsv` parsed from it.
   Joined rows contribute to `score` as a separate admission path.
 - `sources/apply/` — 個人申請 篩選標準 PNGs, and `data/apply-cutoffs.tsv` OCR'd from them.
@@ -449,6 +468,8 @@ Run commands from the repository root. Install Python packages with
     python3 -m parse.star      # sources/star/*.pdf -> data/star-cutoffs.tsv
     python3 -m fetch.apply 108 109 110 111 112 113 114
     python3 -m parse.apply --top-decile  # bounded, checkpointed OCR panel
+    python3 -m fetch.university_quotas
+    python3 -m parse.university_quotas  # MOE 115 department-route quotas
     python3 -m fetch.ceec      # optional; refresh sources/ceec/
     python3 -m parse.ceec      # sources/ceec/*.xls -> data/ceec-scores.tsv
     python3 -m parse.tcte      # sources/tech/tcte-*-scores.pdf -> data/tongce-scores.tsv

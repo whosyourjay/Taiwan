@@ -14,7 +14,7 @@ if __package__ in (None, ""):
 import numpy as np
 from scipy.stats import norm
 
-from lib import tsvio
+from lib import schoolname, tsvio
 from lib.english import english_names
 from lib.paths import ranking_path
 from pool import fit as pool_fit
@@ -26,33 +26,6 @@ LEVELS = (
     ("ability-departments.tsv", ("school", "dept")),
     ("ability-groups.tsv", ("school", "dept", "application_group")),
 )
-SCHOOL_SUCCESSORS = {
-    "國立陽明大學": "國立陽明交通大學",
-    "國立交通大學": "國立陽明交通大學",
-    "國立高雄科技大學(原國立高雄第一科技大學)": "國立高雄科技大學",
-    "國立高雄科技大學(原國立高雄應用科技大學)": "國立高雄科技大學",
-    "國立高雄科技大學(原國立高雄海洋科技大學)": "國立高雄科技大學",
-    "慈濟科技大學": "慈濟大學",
-    "慈濟學校財團法人慈濟科技大學": "慈濟大學",
-}
-FORMER_SCHOOLS = {
-    "國立陽明交通大學": ("國立陽明大學", "國立交通大學"),
-    "國立高雄科技大學": (
-        "國立高雄第一科技大學", "國立高雄應用科技大學", "國立高雄海洋科技大學",
-    ),
-    "慈濟大學": ("慈濟科技大學",),
-}
-OFFICIAL_SCHOOL_ENGLISH = {
-    "國立陽明交通大學": "National Yang Ming Chiao Tung University",
-    "國立陽明大學": "National Yang-Ming University",
-    "國立交通大學": "National Chiao Tung University",
-    "國立高雄科技大學": "National Kaohsiung University of Science and Technology",
-    "國立高雄第一科技大學": "National Kaohsiung First University of Science and Technology",
-    "國立高雄應用科技大學": "National Kaohsiung University of Applied Sciences",
-    "國立高雄海洋科技大學": "National Kaohsiung Marine University",
-    "慈濟大學": "Tzu Chi University",
-    "慈濟科技大學": "Tzu Chi University of Science and Technology",
-}
 STAR = "star"
 STAR_EIGHT = "star_eight"
 GRID = 600
@@ -315,7 +288,7 @@ def current_key(row, columns):
     """Output key, merging predecessor institutions only at school level."""
     values = tuple(row[column] for column in columns)
     if columns == ("school",):
-        return (SCHOOL_SUCCESSORS.get(values[0], values[0]),)
+        return (schoolname.current(values[0]),)
     return values
 
 
@@ -335,7 +308,7 @@ def collect(scored, columns):
 
 def school_english(name, english):
     """Prefer official English names for institutions involved in mergers."""
-    return OFFICIAL_SCHOOL_ENGLISH.get(name, english.get(name, ""))
+    return schoolname.OFFICIAL_ENGLISH.get(name, english.get(name, ""))
 
 
 def table(scored, columns, exams, english=None):
@@ -352,7 +325,7 @@ def table(scored, columns, exams, english=None):
                                     if column == "school"
                                     else english.get(value, ""))
         if columns == ("school",):
-            former = FORMER_SCHOOLS.get(row["school"], ())
+            former = schoolname.FORMER.get(row["school"], ())
             row["former_schools"] = " | ".join(former)
             row["former_schools_en"] = " | ".join(
                 school_english(name, english) for name in former
@@ -409,7 +382,7 @@ def pool_sizes(rows):
     scales = tiling.path_scales(placed, filled)
     seats = collections.defaultdict(float)
     for row, _, _ in placed:
-        school = SCHOOL_SUCCESSORS.get(row["school"], row["school"])
+        school = schoolname.current(row["school"])
         seats[school] += (float(row["seats"])
                           * scales.get(row["path"], 1.0))
     return seats, tiling.assessment_size(pool_fit.YEAR)
