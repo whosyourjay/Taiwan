@@ -16,7 +16,7 @@ def scored(year, seats, ability, route="uac", school="甲大學", dept="甲學�
 class TestAnnualPanel(unittest.TestCase):
     def test_missing_middle_year_is_interpolated(self):
         rows = [scored(108, 10, 20, "apply"), scored(110, 30, 40, "apply")]
-        found = annual.build(rows, quotas=[], seat_rows=rows, totals=[])
+        found = annual.build(rows, quotas=[], seat_rows=rows, totals=[], uac_seats=[])
         middle = next(row for row in found if row["year"] == 109)
         self.assertEqual((middle["seats"], middle["ability"]), (20.0, 30.0))
         self.assertEqual(middle["seats_method"], "interpolated:108,110")
@@ -32,7 +32,8 @@ class TestAnnualPanel(unittest.TestCase):
             scored(114, 7, 0, "star", "國立臺灣大學", "國際企業學系"),
             scored(114, 10, 0, "apply", "國立臺灣大學", "國際企業學系"),
         ]
-        found = annual.build(rows, quotas=[quota], seat_rows=seats, totals=[])
+        found = annual.build(rows, quotas=[quota], seat_rows=seats, totals=[],
+                             uac_seats=[])
         current = {row["route"]: row for row in found if row["year"] == 115}
         self.assertEqual({route: row["seats"] for route, row in current.items()},
                          {"uac": 31.0, "star": 8.0, "apply": 49.0})
@@ -47,7 +48,8 @@ class TestAnnualPanel(unittest.TestCase):
             "tech": "0",
         }
         rows = [scored(110, 20, 90, school="國立交通大學", dept="電機工程學系")]
-        found = annual.build(rows, quotas=[quota], seat_rows=rows, totals=[])
+        found = annual.build(rows, quotas=[quota], seat_rows=rows, totals=[],
+                             uac_seats=[])
         old = next(row for row in found if row["year"] == 110)
         self.assertEqual(old["school"], "國立陽明交通大學")
         self.assertEqual(old["school_year_name"], "國立交通大學")
@@ -60,7 +62,8 @@ class TestAnnualPanel(unittest.TestCase):
             {"year": "115", "school": "甲大學", "dept": "甲學系乙組",
              "total": "20", "uac": "20", "star": "0", "apply": "0", "tech": "0"},
         ]
-        found = annual.build(rows, quotas=quotas, seat_rows=rows, totals=[])
+        found = annual.build(rows, quotas=quotas, seat_rows=rows, totals=[],
+                             uac_seats=[])
         current = next(row for row in found if row["year"] == 115)
         self.assertEqual(current["seats"], 30.0)
 
@@ -68,10 +71,33 @@ class TestAnnualPanel(unittest.TestCase):
         rows = [scored(108, 8, 90, "star"), scored(114, 2, 95, "star_eight")]
         quota = {"year": "115", "school": "甲大學", "dept": "甲學系",
                  "total": "2", "uac": "0", "star": "2", "apply": "0", "tech": "0"}
-        found = annual.build(rows, quotas=[quota], seat_rows=rows, totals=[])
+        found = annual.build(rows, quotas=[quota], seat_rows=rows, totals=[],
+                             uac_seats=[])
         current = {row["route"]: row["seats"]
                    for row in found if row["year"] == 115}
         self.assertEqual(current, {"star": 0.0, "star_eight": 2.0})
+
+    def test_post_return_uac_seats_replace_quota_without_double_counting(self):
+        quota = {
+            "year": "115", "school": "國立臺灣大學", "dept": "國際企業學系",
+            "total": "88", "uac": "31", "star": "8", "apply": "49",
+            "tech": "0",
+        }
+        counts = [
+            {"year": "115", "school": "國立臺灣大學", "dept": "國際企業學系A組",
+             "seats": "8"},
+            {"year": "115", "school": "國立臺灣大學", "dept": "國際企業學系B組",
+             "seats": "24"},
+        ]
+        rows = [scored(114, 32, 95, school="國立臺灣大學",
+                       dept="國際企業學系")]
+        found = annual.build(rows, quotas=[quota], seat_rows=rows, totals=[],
+                             uac_seats=counts)
+        current = {row["route"]: row for row in found if row["year"] == 115}
+        self.assertEqual({route: row["seats"] for route, row in current.items()},
+                         {"uac": 32.0, "star": 8.0, "apply": 48.0})
+        self.assertEqual(current["uac"]["seats_method"], "uac_post_return")
+        self.assertIn("uac_return_estimate", current["apply"]["seats_method"])
 
     def test_interpolation_stays_on_the_line(self):
         rng = random.Random(20260901)

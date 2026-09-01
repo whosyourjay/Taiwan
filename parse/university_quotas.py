@@ -126,29 +126,47 @@ def rows(pdf):
 
 def checked(found):
     """Drop the school totals after testing them against their departments."""
+    groups = collections.defaultdict(list)
+    for row in found:
+        groups[schoolname.without_campus(row["school"])].append(row)
+    total_ids = set()
+    compare = ("total",) + INSIDE
+    for school, group in groups.items():
+        exact = [row for row in group if row["dept"] == TOTAL]
+        candidates = exact
+        if not candidates:
+            candidates = [
+                row for row in group
+                if all((row[name] or 0) == sum(
+                    (other[name] or 0) for other in group if other is not row
+                ) for name in compare)
+            ]
+        if not candidates or (not exact and len(candidates) != 1):
+            raise ValueError(f"{school}: found {len(candidates)} school totals")
+        total_ids.update(id(row) for row in candidates)
     totals = collections.defaultdict(collections.Counter)
     for row in found:
-        if row["dept"] != TOTAL:
+        if id(row) not in total_ids:
             continue
         key = schoolname.without_campus(row["school"])
-        for name in COLUMNS:
+        for name in COLUMNS[1:]:
             if name != SHARE and row[name]:
                 totals[key][name] += row[name]
     summed = collections.defaultdict(collections.Counter)
     for row in found:
-        if row["dept"] == TOTAL:
+        if id(row) in total_ids:
             continue
         key = schoolname.without_campus(row["school"])
-        for name in COLUMNS:
+        for name in COLUMNS[1:]:
             if name != SHARE and row[name]:
                 summed[key][name] += row[name]
     for school, total in totals.items():
-        for name in COLUMNS:
+        for name in COLUMNS[1:]:
             if name != SHARE and total[name] != summed[school][name]:
                 raise ValueError(
                     f"{school} {name}: total {total[name]}"
                     f" against {summed[school][name]} from its departments")
-    return [row for row in found if row["dept"] != TOTAL]
+    return [row for row in found if id(row) not in total_ids]
 
 
 def report(found, out=sys.stderr):

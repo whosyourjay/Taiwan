@@ -188,7 +188,9 @@ the cutoff tables above carry the school evidence instead.
 
 4. Complete the annual department-route panel before aggregation. Raw allocation
    rows supply seats even when their cutoff failed validation. MOE 表7-2 supplies
-   exact 115 quotas. A missing row in a complete source is zero; a gap in partial
+   initial 115 route quotas, and UAC's post-return workbook replaces the 115
+   分發入學 counts. Returned seats come out of 個人申請 first as an explicit
+   estimate. A missing row in a complete source is zero; a gap in partial
    coverage is interpolated between the same department-route's surrounding
    years or carried from its nearest year. Ability uses the same series first,
    then department, school, route-year, and national fallbacks. Finally, published
@@ -427,6 +429,8 @@ Downloaded inputs and auxiliary tables:
   The ranking command reports gaps and uses the totals to calibrate annual seat estimates.
 - `sources/moe/moe-115-quota.pdf` — MOE 表7-2 department intake split by route;
   `data/university-quotas.tsv` is the reconciled 115 allocation table.
+- `sources/uac/115-count.xlsx` — UAC's 1,764 post-return 115 program capacities;
+  `data/uac-seats.tsv` reconciles its 32,494 seats against the published total.
 - `sources/star/` — 繁星推薦 錄取標準, and `data/star-cutoffs.tsv` parsed from it.
   Joined rows contribute to `score` as a separate admission path.
 - `sources/apply/` — 個人申請 篩選標準 PNGs, and `data/apply-cutoffs.tsv` OCR'd from them.
@@ -470,6 +474,8 @@ Run commands from the repository root. Install Python packages with
     python3 -m parse.apply --top-decile  # bounded, checkpointed OCR panel
     python3 -m fetch.university_quotas
     python3 -m parse.university_quotas  # MOE 115 department-route quotas
+    python3 -m fetch.uac_seats
+    python3 -m parse.uac_seats  # UAC 115 post-return program capacities
     python3 -m fetch.ceec      # optional; refresh sources/ceec/
     python3 -m parse.ceec      # sources/ceec/*.xls -> data/ceec-scores.tsv
     python3 -m parse.tcte      # sources/tech/tcte-*-scores.pdf -> data/tongce-scores.tsv

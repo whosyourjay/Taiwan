@@ -16,10 +16,11 @@ from lib.paths import data_path, ranking_path
 
 QUOTA_PATHS = ("uac", "star", "apply", "tech")
 QUOTAS = "university-quotas.tsv"
+UAC_SEATS = "uac-seats.tsv"
 OUTPUT = "rank-history.tsv"
 TOTALS = "admission-totals.tsv"
 COMPLETE_YEARS = {
-    "uac": set(range(107, 115)),
+    "uac": set(range(107, 116)),
     "tech": set(range(107, 116)),
     "star": set(range(108, 115)),
     "star_eight": set(range(108, 115)),
@@ -111,6 +112,11 @@ def quota_rows(path=None):
     return list(tsvio.read_rows(source)) if os.path.exists(source) else []
 
 
+def uac_seat_rows(path=None):
+    source = path or data_path(UAC_SEATS)
+    return list(tsvio.read_rows(source)) if os.path.exists(source) else []
+
+
 def admission_totals(path=None):
     source = path or data_path(TOTALS)
     return list(tsvio.read_rows(source)) if os.path.exists(source) else []
@@ -162,6 +168,48 @@ def add_quotas(cells, labels, year_names, quotas):
                     "ability": None, "ability_method": "", "input_rows": 0,
                 })
                 other_cell["seats"], other_cell["seats_method"] = 0.0, "moe_quota"
+
+
+def deduct_returns(cells, entity, year, returned):
+    """Estimate which earlier-route quotas became final UAC seats."""
+    for route in ("apply", "star", "star_eight", "tech"):
+        cell = cells.get((entity, year, route))
+        available = float(cell.get("seats") or 0) if cell else 0.0
+        moved = min(returned, available)
+        if moved:
+            cell["seats"] = available - moved
+            cell["seats_method"] += "-uac_return_estimate"
+            returned -= moved
+        if returned <= 0:
+            break
+
+
+def add_uac_seats(cells, labels, year_names, rows):
+    """Override initial UAC allocations with UAC's post-return capacity."""
+    totals, counts = collections.Counter(), collections.Counter()
+    for row in rows:
+        entity, year = entity_of(row), int(row["year"])
+        totals[(entity, year)] += float(row.get("seats") or 0)
+        counts[(entity, year)] += 1
+        labels[entity].append(
+            (year, float(row.get("seats") or 0), deptname.normalize(row["dept"]))
+        )
+        year_names[(entity, year)].add(row["school"])
+    years = {year for _, year in totals}
+    for (entity, year, route), cell in cells.items():
+        if route == "uac" and year in years and (entity, year) not in totals:
+            cell["seats"], cell["seats_method"] = 0.0, "uac_post_return"
+    for (entity, year), seats in totals.items():
+        key = entity, year, "uac"
+        cell = cells.setdefault(key, {
+            "entity": entity, "year": year, "route": "uac",
+            "ability": None, "ability_method": "", "input_rows": 0,
+        })
+        initial = float(cell.get("seats") or 0)
+        if seats > initial:
+            deduct_returns(cells, entity, year, seats - initial)
+        cell["seats"], cell["seats_method"] = seats, "uac_post_return"
+        cell["input_rows"] = counts[(entity, year)]
 
 
 def source_complete(entity, year, route, covered):
@@ -316,10 +364,12 @@ def output_rows(cells, labels, year_names):
     return out
 
 
-def build(rows, quotas=None, seat_rows=None, totals=None):
+def build(rows, quotas=None, seat_rows=None, totals=None, uac_seats=None):
     seats = seat_evidence() if seat_rows is None else seat_rows
     cells, labels, year_names, covered = observed_cells(rows, seats)
     add_quotas(cells, labels, year_names, quota_rows() if quotas is None else quotas)
+    add_uac_seats(cells, labels, year_names,
+                  uac_seat_rows() if uac_seats is None else uac_seats)
     expand(cells, covered)
     fill_series(cells, "seats")
     fill_series(cells, "ability")

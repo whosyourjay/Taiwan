@@ -27,6 +27,12 @@ class TestQuotaBugs(unittest.TestCase):
         schools = {row["school"] for row in self.found}
         self.assertIn("康寧大學(臺北)", schools)
 
+    def test_footnotes_do_not_turn_school_totals_into_departments(self):
+        departments = {row["dept"] for row in self.found}
+        self.assertFalse(any(dept.startswith("115學年度外加招生名額")
+                             for dept in departments))
+        self.assertFalse(any(dept.startswith("入學3名") for dept in departments))
+
     def test_the_share_column_is_not_read_as_a_count(self):
         row = self.by_key[("國立政治大學", "歷史學系")]
         self.assertEqual(row[quotas.SHARE], "5%")
